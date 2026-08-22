@@ -1,6 +1,10 @@
 # Data layers (Bronze/Silver raw + DuckDB are reproducible artifacts)
-data/
-!data/gold/exports/
+# NOTE: git cannot re-include a file if a parent dir is excluded by name,
+# so we use per-level whitelisting: data/* then data/gold/* etc.
+data/*
+!data/gold
+data/gold/*
+!data/gold/exports
 
 # Python
 __pycache__/

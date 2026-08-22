@@ -17,7 +17,7 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from src.analytics.metrics import gini, hhi  # noqa: E402
-from src.utils.paths import GOLD_EXPORTS_DIR, SILVER_DIR  # noqa: E402
+from src.utils.paths import GOLD_EXPORTS_DIR  # noqa: E402
 from src.visualization import figures  # noqa: E402
 
 st.set_page_config(page_title="Orbital Commons", page_icon=None,
@@ -133,7 +133,7 @@ def load(name: str) -> pd.DataFrame:
 
 @st.cache_data(ttl=3600, show_spinner="Loading propagated catalog ...")
 def load_gp() -> pd.DataFrame:
-    return pd.read_parquet(SILVER_DIR / "gp_objects.parquet")
+    return pd.read_parquet(GOLD_EXPORTS_DIR / "analytics_gp_snapshot.parquet")
 
 
 @st.cache_resource
@@ -618,7 +618,7 @@ def page_explorer() -> None:
 def page_methodology() -> None:
     page_header("Methodology & Data Quality", "How every number on this console is produced, validated and cross-checked.")
     topn = load("analytics_foster_topn")
-    silver_qr = SILVER_DIR / "_quality_report.json"
+    silver_qr = GOLD_EXPORTS_DIR / "_quality_report.json"
 
     t1, t2, t3, t4 = st.tabs(["Pipeline", "Validation & quality",
                               "Foster benchmark", "Sources & exclusions"])

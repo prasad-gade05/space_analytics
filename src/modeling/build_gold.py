@@ -15,6 +15,7 @@ propagation enriches dim_space_object with fresh-epoch flags.
 from __future__ import annotations
 
 import math
+import shutil
 import sys
 from datetime import datetime, timezone
 
@@ -262,6 +263,7 @@ EXPORT_TABLES = {
     "analytics_foster_topn",
     "analytics_catalog_forecast",
     "analytics_band_clusters",
+    "analytics_gp_snapshot",
 }
 
 
@@ -302,6 +304,13 @@ def main() -> int:
     print(f"    {band_clusters['risk_label'].nunique()} clusters; "
           f"{n_critical} bands rated Critical")
 
+    # trimmed GP snapshot so the dashboard needs nothing outside exports/
+    gp_snapshot = gp[[
+        "norad_cat_id", "object_name", "regime", "is_valid", "is_stale",
+        "teme_x_km", "teme_y_km", "teme_z_km",
+        "subpoint_lat_deg", "subpoint_lon_deg",
+    ]].copy()
+
     tables = {
         "dim_space_object": dim_obj,
         "dim_altitude_shell": dim_shells,
@@ -314,6 +323,7 @@ def main() -> int:
         "analytics_foster_topn": foster_topn,
         "analytics_catalog_forecast": forecast_tbl,
         "analytics_band_clusters": band_clusters,
+        "analytics_gp_snapshot": gp_snapshot,
     }
 
     GOLD_DIR.mkdir(parents=True, exist_ok=True)
@@ -329,6 +339,11 @@ def main() -> int:
         print(f"    {name}: {len(df):,} rows -> duckdb + exports/{out.name} "
               f"({out.stat().st_size/1024:,.0f} KB)")
     con.close()
+
+    # mirror the silver quality report into exports (dashboard dependency)
+    qr_src = SILVER_DIR / "_quality_report.json"
+    if qr_src.exists():
+        shutil.copy2(qr_src, GOLD_EXPORTS_DIR / "_quality_report.json")
 
     print(f"\nduckdb: {db_path.relative_to(GOLD_DIR.parents[2])}")
     print("gold build complete")
