@@ -26,24 +26,71 @@ st.set_page_config(page_title="Orbital Commons", page_icon=None,
 st.markdown(
     """
 <style>
+:root { --panel:#12151b; --line:#232830; --accent:#4cc9f0; --text-dim:#8b949e; }
+
+/* main canvas */
+section.stMain, section.stMain div.block-container {
+    background: #0d1015;
+}
+section.stMain div.block-container { padding-top: 1.1rem; max-width: 1500px; }
+
+/* metric cards */
 div[data-testid="stMetric"] {
-    background: #14171d;
-    border: 1px solid #2a2f39;
+    background: linear-gradient(180deg, #151922 0%, #11141a 100%);
+    border: 1px solid var(--line);
     border-radius: 10px;
-    padding: 10px 14px 8px 14px;
+    padding: 12px 14px 8px 14px;
+    box-shadow: 0 2px 6px rgba(0,0,0,.35);
 }
-div[data-testid="stMetricLabel"] p { font-size: .78rem !important; opacity: .85; }
-div[data-testid="stMetricValue"] { font-size: 1.3rem; }
+div[data-testid="stMetricLabel"] p {
+    font-size: .74rem !important; opacity: .8;
+    text-transform: uppercase; letter-spacing: .06em;
+}
+div[data-testid="stMetricValue"] { font-size: 1.32rem; color: #e6edf3; }
 div[data-testid="stMetricHelpButton"] button { margin-top: -6px; }
+
+/* chart panels */
 div[data-testid="stPlotlyChart"] {
-    background: #101318;
-    border: 1px solid #232830;
+    background: var(--panel);
+    border: 1px solid var(--line);
     border-radius: 10px;
+    box-shadow: 0 2px 6px rgba(0,0,0,.3);
 }
-div[data-testid="column"] div[data-testid="stMarkdownContainer"] h4 {
-    border-left: 3px solid #4cc9f0;
-    padding-left: 8px;
+
+/* captions = chart explanations */
+div[data-testid="stCaptionContainer"] p {
+    font-size: .82rem !important; color: var(--text-dim) !important;
+    padding-top: 4px;
 }
+
+/* alerts */
+div[data-testid="stAlert"] {
+    background: #141a24;
+    border: 1px solid #26303f;
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+}
+
+/* section headers */
+h4 { letter-spacing: .03em; color: #e6edf3; }
+
+/* header badge */
+.badge {
+    display: inline-block; padding: 4px 12px; border-radius: 999px;
+    border: 1px solid #2b5277; color: #7dd3fc; font-size: .78rem;
+    background: rgba(76,201,240,.08);
+}
+.brand-sub { color: var(--text-dim); font-size: .88rem; margin-top: -6px; }
+
+/* tables */
+div[data-testid="stDataFrame"] { border: 1px solid var(--line); border-radius: 10px; }
+
+/* code blocks */
+div[data-testid="stCode"] { border: 1px solid var(--line) !important; border-radius: 8px; }
+
+/* scrollbar */
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-thumb { background: #2a2f39; border-radius: 6px; }
 </style>
 """,
     unsafe_allow_html=True,
@@ -51,6 +98,26 @@ div[data-testid="column"] div[data-testid="stMarkdownContainer"] h4 {
 
 OFFICIAL_COUNTER = 100_403  # max catalog number ever assigned (USSF, 2026-07-11)
 SARAMAGO_DAY = pd.Timestamp("2026-07-11")
+
+
+# ---------------------------------------------------------------- page parts
+
+def page_header(title: str, blurb: str) -> None:
+    """Formal branded header: title + purpose line + data-freshness badge."""
+    growth = load("fact_catalog_growth")
+    as_of = pd.to_datetime(growth["date"]).max().strftime("%d %b %Y")
+    c1, c2 = st.columns([4, 1])
+    with c1:
+        st.markdown(f"### {title}")
+        st.markdown(f'<div class="brand-sub">{blurb}</div>',
+                    unsafe_allow_html=True)
+    with c2:
+        st.markdown(f'<div style="text-align:right">'
+                    f'<span class="badge">DATA AS OF {as_of} UTC</span><br>'
+                    f'<span style="font-size:.72rem;color:#8b949e">'
+                    f'Sources: CelesTrak GP / SATCAT / SOCRATES</span></div>',
+                    unsafe_allow_html=True)
+    st.divider()
 
 
 # ---------------------------------------------------------------- data access
@@ -144,6 +211,7 @@ def section(label: str) -> None:
 # ---------------------------------------------------------------- pages
 
 def page_mission_control() -> None:
+    page_header("Mission Control", "Executive overview of the tracked population, catalog health and this week's highest-risk encounters.")
     objs = load("dim_space_object")
     growth = load("fact_catalog_growth")
     conj = load("fact_conjunction_events")
@@ -220,6 +288,7 @@ def page_mission_control() -> None:
 
 
 def page_risk_radar() -> None:
+    page_header("Conjunction Radar", "Screen every forecast close approach in the rolling 7-day window; filter by regime, probability and miss distance.")
     conj = load("fact_conjunction_events")
 
     kpi_row([
@@ -287,6 +356,7 @@ def page_risk_radar() -> None:
 
 
 def page_congestion_atlas() -> None:
+    page_header("Congestion Atlas", "Where low-Earth orbit is saturating: density per 25 km band, ownership concentration and orbit-usage patterns.")
     dens = load("fact_spatial_density")
     objs = load("dim_space_object")
     leo = dens[dens["band_start"] >= 100]
@@ -344,6 +414,7 @@ def page_congestion_atlas() -> None:
 
 
 def page_league_tables() -> None:
+    page_header("League Tables", "Accountability view: national footprints, debris inequality, operator concentration and six decades of launch history.")
     objs = load("dim_space_object")
     ops = load("dim_operator")
     on = objs[objs["is_on_orbit"]]
@@ -408,6 +479,7 @@ def page_league_tables() -> None:
 
 
 def page_catalog_crisis() -> None:
+    page_header("Catalog Crisis", "The live numbering overflow of 11 July 2026: what broke, how fast the catalog grows, and what it implies.")
     growth = load("fact_catalog_growth")
     days_since = (growth["date"].max() - SARAMAGO_DAY).days
     objs = load("dim_space_object")
@@ -461,6 +533,7 @@ in June 2026 would now be silently missing all of them.
 
 
 def page_globe() -> None:
+    page_header("Orbit Explorer 3D", "SGP4-propagated snapshot of the selected regimes as ground tracks and inertial rings.")
     gp = load_gp()
     regimes = st.multiselect(
         "Regimes shown", sorted(gp["regime"].dropna().unique()),
@@ -490,6 +563,7 @@ def page_globe() -> None:
 
 
 def page_explorer() -> None:
+    page_header("Explorer", "Whitelisted analytical presets compiled against the Gold star schema.")
     st.caption("Whitelisted analytical presets compiled against the Gold layer. "
                "No free-form SQL is accepted - deterministic semantic layer pattern.")
     picked = st.pills("Preset", list(EXPLORER_PRESETS), default=list(EXPLORER_PRESETS)[0])
@@ -505,6 +579,7 @@ def page_explorer() -> None:
 
 
 def page_methodology() -> None:
+    page_header("Methodology & Data Quality", "How every number on this console is produced, validated and cross-checked.")
     topn = load("analytics_foster_topn")
     silver_qr = SILVER_DIR / "_quality_report.json"
 

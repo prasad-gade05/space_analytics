@@ -22,15 +22,33 @@ TYPE_COLORS = {"PAY": "#4cc9f0", "R/B": "#f8961e", "DEB": "#e63946", "UNK": "#ad
 TYPE_LABELS = {"PAY": "Payloads", "R/B": "Rocket bodies", "DEB": "Debris", "UNK": "Unknown"}
 
 
+_FONT = "'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+
+
 def _dark(fig: go.Figure, title: str, height: int = 420, **layout) -> go.Figure:
+    """Unified production styling: transparent backgrounds (CSS panels show
+    through), subtle grids, consistent typography and hover chrome."""
     base = dict(
         template="plotly_dark", height=height,
-        margin=dict(l=20, r=20, t=60, b=50),
-        xaxis=dict(automargin=True), yaxis=dict(automargin=True),
-        legend=dict(font=dict(size=11)),
+        margin=dict(l=20, r=20, t=52, b=46),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family=_FONT, size=12, color="#c9d1d9"),
+        title=dict(font=dict(size=13.5, color="#e6edf3"),
+                   x=0.004, xanchor="left"),
+        hoverlabel=dict(bgcolor="#1b2028", bordercolor="#3a4150",
+                        font=dict(family=_FONT, color="#e6edf3", size=12)),
+        xaxis=dict(automargin=True, gridcolor="#20242c",
+                   zerolinecolor="#20242c", linecolor="#2a2f39"),
+        yaxis=dict(automargin=True, gridcolor="#20242c",
+                   zerolinecolor="#20242c", linecolor="#2a2f39"),
+        legend=dict(font=dict(size=11), bgcolor="rgba(0,0,0,0)"),
     )
     base.update(layout)
-    fig.update_layout(title=title, **base)
+    base["title"] = dict(text=title,
+                         font=dict(size=13.5, color="#e6edf3"),
+                         x=0.004, xanchor="left")
+    fig.update_layout(**base)
     return fig
 
 
