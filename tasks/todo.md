@@ -61,11 +61,20 @@ Format rule: **OMM JSON only for GP data — never legacy TLE** (TLE cannot repr
 
 ### Plan
 - [x] VERIFY: OWNER 0 nulls/130 codes; APOGEE+PERIGEE present for 98.2% of on-orbit; name patterns QIANFAN-*/GUOWANG */KUIPER-* confirmed
-- [ ] `src/modeling/operators.py` — curated operator attribution + OWNER→nation map
-- [ ] `src/analytics/metrics.py` — HHI, Gini (pure functions, tested against known cases)
-- [ ] `src/analytics/foster.py` — Foster/Chan 2D collision-probability integral (numerical), validated vs Chan closed-form case
-- [ ] `src/modeling/build_gold.py` — dims (date, shells, operators, space_object) + facts (inventory, spatial_density w/ HHI+density, conjunction_events w/ regimes, catalog_growth w/ format_type eras) into data/gold/orbital.duckdb + exports parquet (git-committed per kickstart)
-- [ ] tests green + run on real Silver data + audit outputs
+- [x] `src/modeling/operators.py` — curated operator attribution + OWNER→nation map
+- [x] `src/analytics/metrics.py` — HHI, Gini (pure functions, tested against known cases)
+- [x] `src/analytics/foster.py` — Foster/Chan 2D collision-probability integral (in metrics.py; validated vs analytic zero-miss limit <1%; top-N benchmark exported)
+- [x] `src/modeling/build_gold.py` — dims + facts into data/gold/orbital.duckdb + exports parquet (committed)
+- [x] tests green (29) + run on real Silver data + audit outputs
+
+## Task 4: Dashboard, CI, Docs (COMPLETE)
+
+- [x] `src/visualization/figures.py` — pure Plotly builders, unit-tested headlessly
+- [x] `src/visualization/app.py` — 8-page Streamlit console reading committed exports
+- [x] App smoke check: full Mission Control render path executes on real data
+- [x] `Makefile` + `.github/workflows/ingest.yml` (nightly bronze→silver→gold→test→commit exports)
+- [x] `README.md` + `technical_reference.md`
+- [ ] User review of dashboard (`make dashboard`)
 
 ### Design decisions
 - Inventory/density population = SATCAT on-orbit rows binned via own APOGEE/PERIGEE (34k objects vs GP-only 19.6k); GP propagation enriches where fresher

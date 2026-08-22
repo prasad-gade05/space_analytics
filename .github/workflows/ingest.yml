@@ -1,0 +1,54 @@
+name: ingest-and-build
+
+on:
+  schedule:
+    # Full pipeline daily. SOCRATES refreshes ~3x/day upstream; a daily pull
+    # keeps CI minutes low while the conjunction table stays < 24h stale.
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      force_bronze:
+        description: "Re-download even if today's bronze files exist"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Bronze ingestion (CelesTrak, polite pacing)
+        run: |
+          ARGS=""
+          if [ "${{ github.event.inputs.force_bronze }}" = "true" ]; then ARGS="--force"; fi
+          python src/ingestion/fetch_bronze.py $ARGS
+
+      - name: Silver transform
+        run: python -m src.pipeline.run_silver
+
+      - name: Gold star schema + exports
+        run: python -m src.modeling.build_gold
+
+      - name: Test suite
+        run: python -m pytest tests -q
+
+      - name: Commit refreshed Gold exports
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/gold/exports
+          git diff --cached --quiet && echo "No export changes" || \
+            git commit -m "chore(data): nightly gold exports refresh [skip ci]" && git push
