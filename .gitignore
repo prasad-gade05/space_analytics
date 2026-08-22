@@ -1,0 +1,17 @@
+# Data layers (Bronze/Silver raw + DuckDB are reproducible artifacts)
+data/
+!data/gold/exports/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Environment / secrets
+.env
+.env.*
+
+# OS
+Thumbs.db
+.DS_Store
