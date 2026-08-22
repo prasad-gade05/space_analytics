@@ -57,6 +57,21 @@ Format rule: **OMM JSON only for GP data — never legacy TLE** (TLE cannot repr
 - Propagation at element epoch (deterministic; no wall-clock dependency in outputs except staleness flag computed against run date)
 - μ=398600.4418 km³/s², R=6378.137 km consistent with SATCAT apogee/perigee convention
 
+## Task 3: Gold Layer — DuckDB Star Schema + Analytics
+
+### Plan
+- [x] VERIFY: OWNER 0 nulls/130 codes; APOGEE+PERIGEE present for 98.2% of on-orbit; name patterns QIANFAN-*/GUOWANG */KUIPER-* confirmed
+- [ ] `src/modeling/operators.py` — curated operator attribution + OWNER→nation map
+- [ ] `src/analytics/metrics.py` — HHI, Gini (pure functions, tested against known cases)
+- [ ] `src/analytics/foster.py` — Foster/Chan 2D collision-probability integral (numerical), validated vs Chan closed-form case
+- [ ] `src/modeling/build_gold.py` — dims (date, shells, operators, space_object) + facts (inventory, spatial_density w/ HHI+density, conjunction_events w/ regimes, catalog_growth w/ format_type eras) into data/gold/orbital.duckdb + exports parquet (git-committed per kickstart)
+- [ ] tests green + run on real Silver data + audit outputs
+
+### Design decisions
+- Inventory/density population = SATCAT on-orbit rows binned via own APOGEE/PERIGEE (34k objects vs GP-only 19.6k); GP propagation enriches where fresher
+- format_type eras: '5-digit' (<2020-05), 'alpha5-capable' (2020-05..2026-07-11), '6-digit' (>=2026-07-11 Saramago overflow)
+- HHI computed on OWNER-code shares within regime (state proxy until curated dim_operator grows); documented limitation
+
 **Final state: 11 ok / 0 fail / 6 informational warnings. 252,208 records, ~38 MB total.**
 
 | Dataset | Records | Validation vs live reference |
