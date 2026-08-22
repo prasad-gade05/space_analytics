@@ -416,6 +416,22 @@ def page_congestion_atlas() -> None:
         tbl.columns = ["Low km", "High km", "Objects", "Debris", "HHI", "Payload share"]
         st.dataframe(tbl, width="stretch", height=380, hide_index=True)
 
+    clusters = load("analytics_band_clusters")
+    critical = clusters[clusters["risk_label"] == "Critical"]
+    kpi_row([
+        ("Critical bands", f"{len(critical)}",
+         "Highest composite risk from K-Means clustering"),
+        ("Most critical band",
+         f"{int(critical.iloc[0]['lower_km'])}-{int(critical.iloc[0]['upper_km'])} km"
+         if len(critical) else "-",
+         "Ranked by crowding + debris share + conjunction load"),
+        ("Busy bands", f"{int((clusters['risk_label'] == 'Busy').sum())}", None),
+        ("Quiet bands", f"{int((clusters['risk_label'] == 'Quiet').sum())}", None),
+    ])
+    visual(figures.fig_cluster_scatter(clusters),
+           "Each dot is a 25 km band. Red = critical zones: crowded, junk-heavy and "
+           "busy with close approaches. Blue = quiet backwaters.")
+
 
 def page_league_tables() -> None:
     page_header("League Tables", "Accountability view: national footprints, debris inequality, operator concentration and six decades of launch history.")
@@ -506,16 +522,33 @@ def page_catalog_crisis() -> None:
            "Daily additions minus removals. Spikes usually mean new constellations "
            "deploying or breakup events.")
 
-    c1, c2 = st.columns(2)
-    with c1:
-        visual(figures.fig_month_heatmap(growth),
-               "Brighter cells = more new objects that month. Recent columns glow as "
-               "constellations scale.")
-    with c2:
-        visual(figures.fig_crossing_projection(growth),
-               "Naive trendline: if growth simply continues, when does the public "
-               "catalog itself approach six-digit saturation? Back-of-envelope, not a "
-               "forecast model.")
+    visual(figures.fig_month_heatmap(growth),
+           "Brighter cells = more new objects that month. Recent columns glow as "
+           "constellations scale.")
+
+    fc_tbl = load("analytics_catalog_forecast")
+    mape = float(fc_tbl["mape_holdout_pct"].iloc[0])
+    crossing = fc_tbl["crossing_99999"].dropna()
+    cross_txt = (f"model projects the public catalog itself reaching ~100k around "
+                 f"**{pd.Timestamp(crossing.iloc[0]):%B %Y}**"
+                 if len(crossing) else
+                 "the model does not project a 100k crossing within 5 years")
+    st.info(f"ARIMA(1,1,1) weekly model - holdout MAPE **{mape}%**. {cross_txt}.")
+    visual(figures.fig_catalog_forecast(growth, fc_tbl),
+           "Solid blue is observed history; dashed orange is the statistical "
+           "forecast with its uncertainty band. This is a fitted time-series "
+           "model, unlike the naive straight-line trend shown before.")
+    with st.expander("Model card"):
+        st.markdown(
+            f"""
+| Property | Value |
+|---|---|
+| Model | ARIMA(1,1,1) on weekly cumulative size since 2010 |
+| Horizon | 260 weeks (5 years) |
+| Validation | 80/20 holdout, MAPE = {mape}% |
+| Caveat | Trend extrapolation only; regime shifts (new constellations, breakups) are not modeled |
+"""
+        )
 
     visual(figures.fig_era_timeline(),
            "Three numbering regimes side by side - note how short the current era is.")

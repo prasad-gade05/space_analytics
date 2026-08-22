@@ -22,6 +22,8 @@ import duckdb
 import numpy as np
 import pandas as pd
 
+from src.analytics.clustering import build_band_clusters
+from src.analytics.forecast import build_forecast_table, forecast_catalog
 from src.analytics.metrics import foster_pc_numeric, hhi
 from src.modeling.operators import attribute_operator, build_dim_operator, owner_to_nation
 from src.transformation.shells import EARTH_RADIUS_KM, REGIME_SHELLS, altitude_band, regime_shell
@@ -258,6 +260,8 @@ EXPORT_TABLES = {
     "fact_conjunction_events",
     "fact_catalog_growth",
     "analytics_foster_topn",
+    "analytics_catalog_forecast",
+    "analytics_band_clusters",
 }
 
 
@@ -286,6 +290,18 @@ def main() -> int:
     print("[gold] Foster/Chan Pc re-derivation on top-N risk events ...")
     foster_topn = build_foster_topn(fact_soc)
 
+    print("[gold] ARIMA catalog forecast (weekly, 5-year horizon) ...")
+    fc = forecast_catalog(fact_growth)
+    forecast_tbl = build_forecast_table(fc)
+    print(f"    holdout MAPE {fc['mape_holdout_pct']}% | crossing 99,999: "
+          f"{fc['crossing_99999'].date() if fc['crossing_99999'] is not None else 'beyond horizon'}")
+
+    print("[gold] K-Means danger-zone clustering of bands ...")
+    band_clusters = build_band_clusters(fact_dens, fact_soc, dim_obj)
+    n_critical = int((band_clusters["risk_label"] == "Critical").sum())
+    print(f"    {band_clusters['risk_label'].nunique()} clusters; "
+          f"{n_critical} bands rated Critical")
+
     tables = {
         "dim_space_object": dim_obj,
         "dim_altitude_shell": dim_shells,
@@ -296,6 +312,8 @@ def main() -> int:
         "fact_conjunction_events": fact_soc,
         "fact_catalog_growth": fact_growth,
         "analytics_foster_topn": foster_topn,
+        "analytics_catalog_forecast": forecast_tbl,
+        "analytics_band_clusters": band_clusters,
     }
 
     GOLD_DIR.mkdir(parents=True, exist_ok=True)

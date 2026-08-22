@@ -527,3 +527,59 @@ def fig_ground_track(gp: pd.DataFrame, max_points: int = 5000) -> go.Figure:
     )
     return _dark(fig, "Ground tracks at element epochs (WGS84 subpoints)",
                  height=480)
+
+
+def fig_catalog_forecast(growth: pd.DataFrame, fc_tbl: pd.DataFrame,
+                         since: str = "2015-01-01") -> go.Figure:
+    g = growth[pd.to_datetime(growth["date"]) >= since]
+    hist_dates = pd.to_datetime(g["date"])
+    fc_dates = pd.to_datetime(fc_tbl["date"])
+
+    fig = go.Figure()
+    fig.add_scatter(x=hist_dates, y=g["cumulative_catalog_size"],
+                    mode="lines", name="observed", line=dict(color="#4cc9f0"))
+    fig.add_scatter(x=fc_dates, y=fc_tbl["ci_upper"], mode="lines",
+                    line=dict(width=0), showlegend=False, hoverinfo="skip")
+    fig.add_scatter(x=fc_dates, y=fc_tbl["ci_lower"], mode="lines",
+                    line=dict(width=0), fillcolor="rgba(248,150,30,.25)",
+                    fill="tonexty", name="95% CI", hoverinfo="skip")
+    fig.add_scatter(x=fc_dates, y=fc_tbl["forecast"], mode="lines",
+                    name=f"ARIMA forecast", line=dict(color="#f8961e", dash="dash"))
+    fig.add_hline(y=99_999, line_dash="dot", line_color="#ff5d8f")
+    crossing = fc_tbl["crossing_99999"].dropna()
+    if len(crossing):
+        d = pd.Timestamp(crossing.iloc[0]).to_pydatetime()
+        yv = float(fc_tbl.loc[fc_tbl["crossing_99999"].notna(), "forecast"].iloc[0])
+        fig.add_annotation(x=d, y=yv, text=f"public catalog ~100k: {d:%b %Y}",
+                           showarrow=True, arrowhead=1, font=dict(color="#ff5d8f"))
+    mape = float(fc_tbl["mape_holdout_pct"].iloc[0])
+    fig.add_annotation(xref="paper", x=0.01, y=0.06, showarrow=False,
+                       text=f"holdout MAPE {mape}%", font=dict(color="#8b949e"))
+    return _dark(fig, "ARIMA(1,1,1) weekly forecast of public catalog size (5-year)",
+                 yaxis_title="Cumulative objects", height=470)
+
+
+def fig_cluster_scatter(clusters: pd.DataFrame) -> go.Figure:
+    c = clusters.copy()
+    label_colors = {"Quiet": "#4cc9f0", "Moderate": "#a78bfa",
+                    "Busy": "#f8961e", "Critical": "#e63946"}
+    fig = go.Figure()
+    for label in ["Quiet", "Moderate", "Busy", "Critical"]:
+        s = c[c["risk_label"] == label]
+        if s.empty:
+            continue
+        fig.add_scatter(
+            x=s["object_count"], y=s["debris_share"] * 100, mode="markers",
+            name=label, marker=dict(size=9, color=label_colors[label], opacity=.85),
+            customdata=np.stack([
+                s["lower_km"].astype(int).astype(str) + "-" + s["upper_km"].astype(int).astype(str) + " km",
+                s["conj_events"], s["mean_rel_speed"],
+            ], axis=-1),
+            hovertemplate="%{customdata[0]}<br>%{x:,} objects | "
+                          "%{y:.0f}% debris<br>events %{customdata[1]:,}"
+                          " | speed %{customdata[2]:.1f} km/s<extra></extra>",
+        )
+    fig.update_xaxes(type="log", title="Objects in band (log)")
+    fig.update_yaxes(title="Debris share (%)")
+    return _dark(fig, "Danger-zone clustering of 25 km bands (K-Means, k=4)",
+                 height=460)
