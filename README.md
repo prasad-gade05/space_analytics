@@ -11,7 +11,7 @@ No accounts, no API keys — clone and run.
 ## Why this is interesting right now
 
 - **The catalog overflow crisis.** On 2026-07-11 the 5-digit NORAD catalog number
-  space ran out ("SARAMAGO", ID 100000). Legacy TLE *cannot represent* the new
+  space ran out ("SARAMAGO", ID 100000). Legacy TLE _cannot represent_ the new
   six-digit IDs, so every TLE-based pipeline silently drops newly cataloged
   satellites. This project ingests **OMM JSON/CSV only**, so the 331+ six-digit-ID
   objects already tracked appear in every layer. The dashboard quantifies the gap:
@@ -63,13 +63,13 @@ streamlit run src/visualization/app.py
 
 ## Data sources & usage policy
 
-| Source | Endpoint | Cadence here |
-|---|---|---|
-| GP orbital elements | `celestrak.org/NORAD/elements/gp.php?GROUP=…&FORMAT=JSON` | daily |
-| SATCAT snapshot | `records.php?INTDES=<year>&FORMAT=CSV` sweep (1957→now) | baseline cached once; current year daily |
-| SOCRATES Plus | `celestrak.org/SOCRATES/sort-minRange.csv` | each run (~3×/day upstream) |
-| Growth history | `celestrak.org/satcat/growth.csv` | daily |
-| Boxscore | `celestrak.org/satcat/boxscore.php` | daily |
+| Source              | Endpoint                                                  | Cadence here                             |
+| ------------------- | --------------------------------------------------------- | ---------------------------------------- |
+| GP orbital elements | `celestrak.org/NORAD/elements/gp.php?GROUP=…&FORMAT=JSON` | daily                                    |
+| SATCAT snapshot     | `records.php?INTDES=<year>&FORMAT=CSV` sweep (1957→now)   | baseline cached once; current year daily |
+| SOCRATES Plus       | `celestrak.org/SOCRATES/sort-minRange.csv`                | each run (~3×/day upstream)              |
+| Growth history      | `celestrak.org/satcat/growth.csv`                         | daily                                    |
+| Boxscore            | `celestrak.org/satcat/boxscore.php`                       | daily                                    |
 
 All use of CelesTrak follows their published usage policy (identified User-Agent,
 polite pacing ≥3 s, incremental caching). Space-Track.org and ESA DISCOS were
@@ -90,36 +90,3 @@ tests/                            # 29 checks: codecs, physics, metrics, figures
 tasks/todo.md, tasks/lessons.md   # build log and self-correction notes
 technical_reference.md            # schemas, formulas, assumptions, findings
 ```
-
-## Status
-
-- Bronze: 11 datasets, 252k records/day-1, manifests with SHA-256
-- Silver: 19,634 unique GP objects validated (0 rejections), 70,355-row catalog,
-  148,985 conjunction events
-- Gold: DuckDB star schema + git-committed exports incl. ARIMA forecast and
-  K-Means danger-zone clustering of altitude bands
-- Tests: 34 passing · CI: nightly ingest-and-build workflow
-
-## Publishing & deployment
-
-**Dataset package (Kaggle / Hugging Face):**
-
-```bash
-make package    # assembles data/publish/orbital_commons_v1/ (+ checksum manifest)
-```
-
-Upload the folder contents to Hugging Face (`huggingface-cli upload <user>/orbital-commons ...`)
-or Kaggle ("New Dataset" -> drag folder). The included `DatasetReadme.md` is a
-HF-format card with license, column dictionary, provenance citation and limitations.
-
-**Live dashboard (Streamlit Community Cloud):**
-
-1. Push this repo to GitHub.
-2. share.streamlit.io -> New app -> pick repo -> main file `src/visualization/app.py`.
-3. Python 3.13; dependencies resolve from `requirements.txt`. The app reads only
-   committed files under `data/gold/exports/`, so it deploys with zero secrets;
-   the nightly Action keeps them fresh.
-
-**Space-Track enrichment (stretch goal):** submit the account application
-(up to 30-day approval); wire `cdm_public`/`decay` pulls as an optional module
-once approved - the pipeline deliberately does not depend on it.
