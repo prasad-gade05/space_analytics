@@ -23,6 +23,32 @@ from src.visualization import figures  # noqa: E402
 st.set_page_config(page_title="Orbital Commons", page_icon=None,
                    layout="wide", initial_sidebar_state="collapsed")
 
+st.markdown(
+    """
+<style>
+div[data-testid="stMetric"] {
+    background: #14171d;
+    border: 1px solid #2a2f39;
+    border-radius: 10px;
+    padding: 10px 14px 8px 14px;
+}
+div[data-testid="stMetricLabel"] p { font-size: .78rem !important; opacity: .85; }
+div[data-testid="stMetricValue"] { font-size: 1.3rem; }
+div[data-testid="stMetricHelpButton"] button { margin-top: -6px; }
+div[data-testid="stPlotlyChart"] {
+    background: #101318;
+    border: 1px solid #232830;
+    border-radius: 10px;
+}
+div[data-testid="column"] div[data-testid="stMarkdownContainer"] h4 {
+    border-left: 3px solid #4cc9f0;
+    padding-left: 8px;
+}
+</style>
+""",
+    unsafe_allow_html=True,
+)
+
 OFFICIAL_COUNTER = 100_403  # max catalog number ever assigned (USSF, 2026-07-11)
 SARAMAGO_DAY = pd.Timestamp("2026-07-11")
 
@@ -96,15 +122,19 @@ def preset_query(name: str) -> pd.DataFrame:
 # ---------------------------------------------------------------- page parts
 
 def visual(fig, note: str, **kwargs):
-    """Render a figure followed by a one-line plain-English explanation."""
-    st.plotly_chart(fig, width="stretch", **kwargs)
-    st.caption(note)
+    """Render a figure in a bordered panel followed by a layman caption."""
+    with st.container(border=True):
+        st.plotly_chart(fig, width="stretch", **kwargs)
+        st.caption(note)
 
 
-def kpi_row(items: list[tuple[str, str, str | None]]) -> None:
-    cols = st.columns(len(items))
-    for col, (label, value, help_text) in zip(cols, items):
-        col.metric(label, value, help=help_text)
+def kpi_row(items: list[tuple[str, str, str | None]], per_row: int = 4) -> None:
+    """Metric cards: max 4 per row so labels never overflow."""
+    for start in range(0, len(items), per_row):
+        chunk = items[start:start + per_row]
+        cols = st.columns(len(chunk))
+        for col, (label, value, help_text) in zip(cols, chunk):
+            col.metric(label, value, help=help_text)
 
 
 def section(label: str) -> None:
@@ -123,16 +153,20 @@ def page_mission_control() -> None:
     worst = next24.loc[next24["max_probability"].idxmax()]
 
     kpi_row([
-        ("Public catalog (all-time)", f"{len(objs):,}",
-         "Objects publicly queryable via CelesTrak SATCAT"),
-        ("On-orbit tracked", f"{len(on):,}", "No decay date in latest snapshot"),
-        ("Debris share on orbit", f"{(on['object_type'] == 'DEB').mean():.0%}", None),
-        ("Official counter gap", f"{OFFICIAL_COUNTER - len(objs):,}",
-         "Max-assigned number minus public rows: withheld 7xxxx–9xxxx block"),
-        ("Events next 24 h", f"{len(next24):,}", None),
-        ("Top Pc next 24 h", f"{worst['max_probability']:.3f}", None),
-        ("Events Pc ≥ 1%", f"{(conj['max_probability'] >= 0.01).sum():,}", None),
-        ("Catalog growth yesterday", f"+{int(growth['new_objects_added'].iloc[-1]):,}", None),
+        ("Catalog", f"{len(objs):,}",
+         "All-time public catalog size (CelesTrak SATCAT queryable records)"),
+        ("On-orbit", f"{len(on):,}", "No decay date in latest snapshot"),
+        ("Debris %", f"{(on['object_type'] == 'DEB').mean():.0%}",
+         "Share of on-orbit objects classified as debris"),
+        ("Hidden gap", f"{OFFICIAL_COUNTER - len(objs):,}",
+         "Official max-assigned number minus public rows: withheld 7xxxx-9xxxx block"),
+        ("Events 24h", f"{len(next24):,}", "Conjunctions forecast for the next day"),
+        ("Top Pc 24h", f"{worst['max_probability']:.3f}",
+         "Highest collision probability forecast tomorrow"),
+        ("Pc >= 1%", f"{(conj['max_probability'] >= 0.01).sum():,}",
+         "Weekly events operators would actively watch"),
+        ("New / day", f"+{int(growth['new_objects_added'].iloc[-1]):,}",
+         "Objects added to the public catalog yesterday"),
     ])
 
     st.info(
@@ -189,10 +223,11 @@ def page_risk_radar() -> None:
     conj = load("fact_conjunction_events")
 
     kpi_row([
-        ("Screened events (7-day)", f"{len(conj):,}", None),
+        ("Screened", f"{len(conj):,}", "Events screened over the rolling 7-day run"),
         ("Miss < 1 km", f"{(conj['min_range_km'] < 1).sum():,}", None),
         ("Median miss", f"{conj['min_range_km'].median()*1000:.0f} m", None),
-        ("Median closing speed", f"{conj['rel_speed_km_s'].median():.1f} km/s", None),
+        ("Med speed", f"{conj['rel_speed_km_s'].median():.1f} km/s",
+         "Median closing speed of the pair"),
         ("Max Pc", f"{conj['max_probability'].max():.3f}", None),
     ])
 
@@ -262,10 +297,10 @@ def page_congestion_atlas() -> None:
          f"{int(busiest['object_count']):,} objects"),
         ("Peak HHI", f"{leo['shell_hhi'].max():.2f}",
          f"@ {int(leo.loc[leo['shell_hhi'].idxmax(), 'lower_km'])} km band"),
-        ("LEO clutter ratio", f"{leo['clutter_ratio'].mean():.2f}",
+        ("Clutter ratio", f"{leo['clutter_ratio'].mean():.2f}",
          "Payload share across LEO bands"),
-        ("Objects above 2,000 km", f"{int((objs[objs['is_on_orbit'] & objs['regime'].notna()]['regime'].isin(['MEO','GEO','HEO/Deep-Space'])).sum()):,}",
-         None),
+        ("> 2,000 km", f"{int((objs[objs['is_on_orbit'] & objs['regime'].notna()]['regime'].isin(['MEO','GEO','HEO/Deep-Space'])).sum()):,}",
+         "Objects outside the LEO density grid"),
     ])
 
     visual(figures.fig_density_bands(dens),
@@ -323,13 +358,15 @@ def page_league_tables() -> None:
     )
 
     deb_only = on[on["object_type"] == "DEB"].groupby("nation").size()
+    worst_ratio_nation = nations["debris_per_payload"].idxmax()
     kpi_row([
-        ("States on orbit", f"{on['nation'].nunique()}", None),
-        ("Debris-footprint Gini", f"{gini(deb_only.values):.3f}",
-         "0 = evenly shared responsibility, toward 1 = concentrated"),
-        ("Worst debris/payload ratio", f"{nations['debris_per_payload'].max():.1f}x",
-         f"{nations['debris_per_payload'].idxmax()}"),
-        ("Attributed to curated operators", f"{int((on['operator_id'] > 0).sum()):,}", None),
+        ("States", f"{on['nation'].nunique()}", "States with objects currently on orbit"),
+        ("Debris Gini", f"{gini(deb_only.values):.3f}",
+         "0 = evenly shared debris responsibility, toward 1 = concentrated"),
+        ("Debris / payload", f"{nations['debris_per_payload'].max():.1f}x",
+         f"Worst ratio: {worst_ratio_nation}"),
+        ("Curated ops", f"{int((on['operator_id'] > 0).sum()):,}",
+         "On-orbit objects attributed to a curated operator"),
     ])
 
     c1, c2 = st.columns(2)
@@ -377,12 +414,12 @@ def page_catalog_crisis() -> None:
     n_six = int((objs["object_id"] >= 100_000).sum())
 
     kpi_row([
-        ("Days since overflow", f"{days_since}", "Saramago cataloged 2026-07-11"),
-        ("Public catalog size", f"{int(growth['cumulative_catalog_size'].iloc[-1]):,}", None),
+        ("Since overflow", f"{days_since}", "Days since Saramago exhausted 5-digit IDs"),
+        ("Public catalog", f"{int(growth['cumulative_catalog_size'].iloc[-1]):,}", None),
         ("Official counter", f"{OFFICIAL_COUNTER:,}",
          "Includes unpublished 7xxxx-9xxxx block"),
-        ("Six-digit IDs in our layers", f"{n_six:,}",
-         "TLE pipelines would drop every one of these"),
+        ("6-digit IDs", f"{n_six:,}",
+         "Six-digit objects present in our layers; TLE pipelines would drop these"),
     ])
 
     visual(figures.fig_growth_eras(growth),
@@ -432,11 +469,11 @@ def page_globe() -> None:
     valid = gp[gp["is_valid"] & gp["regime"].isin(regimes)]
 
     kpi_row([
-        ("Objects plotted (sampled)", f"{min(len(valid), 5000):,}", None),
-        ("Unique objects in selection", f"{len(valid):,}", None),
-        ("Stale elements (>14 d)", f"{int(valid['is_stale'].sum()):,}",
+        ("Plotted", f"{min(len(valid), 5000):,}", "Sampled points sent to the 3D scene"),
+        ("In selection", f"{len(valid):,}", "Unique objects matching regime filter"),
+        ("Stale >14d", f"{int(valid['is_stale'].sum()):,}",
          "Older element sets propagate less accurately"),
-        ("Frame", "TEME + WGS84 subpoints", None),
+        ("Frame", "TEME", "Positions at each object's element epoch"),
     ])
 
     visual(figures.fig_ground_track(valid),
@@ -496,10 +533,11 @@ mu = 398600.4418 km3/s2, Earth radius 6378.137 km.
             qr = json.loads(silver_qr.read_text(encoding="utf-8"))
             gpq = qr.get("gp_objects", {})
             kpi_row([
-                ("GP objects valid", f"{gpq.get('valid', 0):,}", None),
-                ("GP rejected", f"{gpq.get('rejected', 0):,}", None),
-                ("Stale epochs >14 d", f"{gpq.get('stale', 0):,}", None),
-                ("SATCAT rows", f"{qr.get('satcat', {}).get('rows', 0):,}", None),
+                ("Valid", f"{gpq.get('valid', 0):,}", "GP objects passing all gates"),
+                ("Rejected", f"{gpq.get('rejected', 0):,}",
+                 "Kept but flagged (perigee/ecc/sgp4 gates)"),
+                ("Stale >14d", f"{gpq.get('stale', 0):,}", None),
+                ("SATCAT", f"{qr.get('satcat', {}).get('rows', 0):,}", None),
                 ("On-orbit", f"{qr.get('satcat', {}).get('on_orbit', 0):,}", None),
             ])
         st.caption(

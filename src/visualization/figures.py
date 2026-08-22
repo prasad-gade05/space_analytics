@@ -330,14 +330,36 @@ def fig_type_donut(dim_obj: pd.DataFrame) -> go.Figure:
 
 def fig_hist(series: pd.Series, title: str, x_title: str,
              color: str = "#4cc9f0", log_x: bool = True, nbins: int = 40) -> go.Figure:
-    s = series.dropna()
+    """Histogram with manual bins. Log-scale data MUST use pre-computed
+    log-spaced bins: go.Histogram's linear autobinning collapses skewed
+    distributions into one sliver that vanishes under a log axis."""
+    s = pd.Series(series).dropna().astype(float)
     s = s[s > 0]
-    fig = go.Figure(go.Histogram(
-        x=s, nbinsx=nbins, marker_color=color,
-        hovertemplate="%{x} bin: %{y:,} events<extra></extra>",
+    if s.empty:
+        return _dark(go.Figure(go.Bar(x=[0], y=[0])), title,
+                     yaxis_title="Events", xaxis_title=x_title)
+
+    if not log_x:
+        fig = go.Figure(go.Histogram(x=s, nbinsx=nbins, marker_color=color,
+                                     hovertemplate="%{x}: %{y:,} events<extra></extra>"))
+        return _dark(fig, title, yaxis_title="Events", xaxis_title=x_title)
+
+    lo = float(np.log10(s.min()))
+    hi = float(np.log10(s.max()))
+    if hi - lo < 0.5:  # degenerate range: widen so bins are visible
+        mid = (lo + hi) / 2
+        lo, hi = mid - 0.5, mid + 0.5
+    edges = np.logspace(lo, hi, nbins + 1)
+    counts, _ = np.histogram(s, bins=edges)
+    centers = np.sqrt(edges[:-1] * edges[1:])  # geometric mean of each bin
+    widths = np.diff(edges) * 0.94
+    ranges = [f"{a:.1e} - {b:.1e}" for a, b in zip(edges[:-1], edges[1:])]
+    fig = go.Figure(go.Bar(
+        x=centers, y=counts, width=widths, marker_color=color,
+        customdata=ranges,
+        hovertemplate="%{customdata}: %{y:,} events<extra></extra>",
     ))
-    if log_x:
-        fig.update_xaxes(type="log")
+    fig.update_xaxes(type="log")
     return _dark(fig, title, yaxis_title="Events", xaxis_title=x_title)
 
 
