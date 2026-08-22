@@ -149,3 +149,43 @@ def test_frontier_operator_share_stale_foster_hist():
     })
     assert isinstance(figures.fig_foster_benchmark(topn), go.Figure)
     assert isinstance(figures.fig_foster_ratio_hist(topn), go.Figure)
+
+
+def test_density_pack_figures(dens):
+    objs = pd.DataFrame({
+        "is_on_orbit": [True] * 5,
+        "object_type": ["PAY", "R/B", "DEB", "PAY", "DEB"],
+        "nation": ["US", "CIS", "CIS", "PRC", "FR"],
+        "mean_altitude_km": [550.0, 850.0, 1400.0, 300.0, 1900.0],
+        "inclination_deg": [53.0, 98.0, 74.0, 51.0, 100.0],
+        "object_id": [1, 2, 3, 4, 5],
+        "operator_id": [1, 0, 0, 2, 0],
+    })
+    conj = pd.DataFrame({
+        "min_range_km": [0.016, 0.5, 3.0, 12.0, 1.1],
+        "max_probability": [1e-2, 1e-4, 1e-6, 1e-8, 5e-5],
+        "primary_nation": ["US", "US", "CIS", "PRC", "US"],
+        "secondary_nation": ["CIS", "PRC", "PRC", "US", "CIS"],
+    })
+    growth = pd.DataFrame({
+        "date": pd.to_datetime([f"2026-08-{d:02d}" for d in range(1, 29)]),
+        "cumulative_catalog_size": range(70_000, 70_028),
+        "new_objects_added": [1] * 28,
+        "new_decayed": [0] * 28,
+    })
+    gp = pd.DataFrame({
+        "is_valid": [True, True], "subpoint_lat_deg": [10.0, -20.0],
+        "subpoint_lon_deg": [20.0, 40.0],
+        "object_name": ["A", "B"],
+    })
+
+    assert isinstance(figures.fig_type_donut(objs), go.Figure)
+    assert isinstance(figures.fig_hist(conj["max_probability"], "t", "x"), go.Figure)
+    assert isinstance(figures.fig_nation_pair_bar(conj), go.Figure)
+    assert isinstance(figures.fig_band_composition(dens), go.Figure)
+    assert isinstance(figures.fig_clutter_line(dens), go.Figure)
+    assert isinstance(figures.fig_alt_cdf(objs), go.Figure)
+    assert isinstance(figures.fig_month_heatmap(growth), go.Figure)
+    assert isinstance(figures.fig_crossing_projection(growth), go.Figure)
+    assert isinstance(figures.fig_era_timeline(), go.Figure)
+    assert isinstance(figures.fig_ground_track(gp), go.Figure)

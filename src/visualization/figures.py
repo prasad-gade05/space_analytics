@@ -23,8 +23,14 @@ TYPE_LABELS = {"PAY": "Payloads", "R/B": "Rocket bodies", "DEB": "Debris", "UNK"
 
 
 def _dark(fig: go.Figure, title: str, height: int = 420, **layout) -> go.Figure:
-    fig.update_layout(template="plotly_dark", title=title, height=height,
-                      margin=dict(l=10, r=10, t=60, b=10), **layout)
+    base = dict(
+        template="plotly_dark", height=height,
+        margin=dict(l=20, r=20, t=60, b=50),
+        xaxis=dict(automargin=True), yaxis=dict(automargin=True),
+        legend=dict(font=dict(size=11)),
+    )
+    base.update(layout)
+    fig.update_layout(title=title, **base)
     return fig
 
 
@@ -137,7 +143,7 @@ def fig_nation_footprint(dim_obj: pd.DataFrame, top_n: int = 14) -> go.Figure:
                     orientation="h", marker_color=TYPE_COLORS[t])
     return _dark(fig, f"On-orbit footprint by nation/state (top {top_n})",
                  height=520, xaxis_title="Objects (log)", xaxis_type="log",
-                 barmode="stack")
+                 barmode="stack", margin=dict(l=150))
 
 
 def fig_lorenz_debris(dim_obj: pd.DataFrame) -> go.Figure:
@@ -306,3 +312,178 @@ def fig_3d_snapshot(gp: pd.DataFrame, max_points: int = 6000) -> go.Figure:
     fig.update_traces(marker=dict(size=2))
     return _dark(fig, "Catalog snapshot at element epochs (TEME inertial frame, SGP4)",
                  legend_title="Regime")
+
+
+# ------------------------------------------------------------- density pack
+
+def fig_type_donut(dim_obj: pd.DataFrame) -> go.Figure:
+    on = dim_obj[dim_obj["is_on_orbit"]]
+    counts = on["object_type"].value_counts().reindex(["PAY", "R/B", "DEB", "UNK"]).fillna(0)
+    fig = go.Figure(go.Pie(
+        labels=[TYPE_LABELS[t] for t in counts.index],
+        values=counts.values, hole=0.6,
+        marker=dict(colors=[TYPE_COLORS[t] for t in counts.index]),
+        textinfo="label+percent", textfont_size=11,
+    ))
+    return _dark(fig, "On-orbit composition", height=380)
+
+
+def fig_hist(series: pd.Series, title: str, x_title: str,
+             color: str = "#4cc9f0", log_x: bool = True, nbins: int = 40) -> go.Figure:
+    s = series.dropna()
+    s = s[s > 0]
+    fig = go.Figure(go.Histogram(
+        x=s, nbinsx=nbins, marker_color=color,
+        hovertemplate="%{x} bin: %{y:,} events<extra></extra>",
+    ))
+    if log_x:
+        fig.update_xaxes(type="log")
+    return _dark(fig, title, yaxis_title="Events", xaxis_title=x_title)
+
+
+def fig_nation_pair_bar(conj: pd.DataFrame, top_n: int = 10) -> go.Figure:
+    pairs = (
+        conj.groupby([conj["primary_nation"].fillna("?"),
+                      conj["secondary_nation"].fillna("?")], observed=True)
+        .size().rename("events").nlargest(top_n).reset_index()
+    )
+    pairs["pair"] = pairs.iloc[:, 0] + "  vs  " + pairs.iloc[:, 1]
+    fig = go.Figure(go.Bar(
+        y=pairs["pair"][::-1], x=pairs["events"][::-1], orientation="h",
+        marker_color="#f8961e",
+        hovertemplate="%{y}: %{x:,} events<extra></extra>",
+    ))
+    return _dark(fig, f"Top {top_n} encounter corridors (owner-state pairs)",
+                 xaxis_title="Events this week", height=460, margin=dict(l=220))
+
+
+def fig_band_composition(dens: pd.DataFrame) -> go.Figure:
+    d = dens[dens["band_start"] >= 100].sort_values("band_start")
+    labels = (d["lower_km"].astype(int).astype(str) + "-" + d["upper_km"].astype(int).astype(str))
+    totals = d[["payload_count", "rb_count", "debris_count"]].sum(axis=1)
+    shares = pd.DataFrame({
+        "Payloads": d["payload_count"] / totals * 100,
+        "Rocket bodies": d["rb_count"] / totals * 100,
+        "Debris": d["debris_count"] / totals * 100,
+    })
+    fig = go.Figure()
+    for col, color in zip(shares.columns, ["#4cc9f0", "#f8961e", "#e63946"]):
+        fig.add_bar(x=labels, y=shares[col], name=col, marker_color=color)
+    fig.update_layout(barmode="stack")
+    fig.update_xaxes(tickangle=-45)
+    return _dark(fig, "Band composition — % of objects that are junk",
+                 yaxis_title="Share (%)", height=440)
+
+
+def fig_clutter_line(dens: pd.DataFrame) -> go.Figure:
+    d = dens[(dens["band_start"] >= 100)].sort_values("band_start")
+    fig = go.Figure(go.Scatter(
+        x=d["lower_km"] + 12.5, y=d["clutter_ratio"], mode="lines+markers",
+        line=dict(color="#4cc9f0"), fill="tozeroy", opacity=0.9,
+        hovertemplate="%{x:.0f} km: %{y:.0%} payloads<extra></extra>",
+    ))
+    fig.update_yaxes(tickformat=".0%", title="Useful share")
+    return _dark(fig, "Clutter ratio by altitude — useful vs junk",
+                 xaxis_title="Band centre (km)", height=400)
+
+
+def fig_alt_cdf(dim_obj: pd.DataFrame, alt_max: float = 2000.0) -> go.Figure:
+    alts = dim_obj[dim_obj["is_on_orbit"] & dim_obj["mean_altitude_km"].notna()]
+    alts = np.sort(alts.loc[alts["mean_altitude_km"] <= alt_max, "mean_altitude_km"].values)
+    cdf = np.arange(1, len(alts) + 1) / len(alts)
+    p50 = float(np.percentile(alts, 50))
+    p90 = float(np.percentile(alts, 90))
+    fig = go.Figure(go.Scatter(
+        x=alts, y=cdf, mode="lines", line=dict(color="#a78bfa"),
+        hovertemplate="%{x:.0f} km: %{y:.0%}<extra></extra>",
+    ))
+    for pct, val, label in [(0.5, p50, "50%"), (0.9, p90, "90%")]:
+        fig.add_hline(y=pct, line_dash="dot", line_color="#666")
+        fig.add_vline(x=val, line_dash="dot", line_color="#666",
+                      annotation_text=f"{label}: {val:.0f} km", annotation_font_size=10)
+    return _dark(fig, "Cumulative altitude curve of on-orbit objects (≤2,000 km)",
+                 xaxis_title="Mean altitude (km)", yaxis_title="Share of objects",
+                 height=420)
+
+
+def fig_month_heatmap(growth: pd.DataFrame, since_year: int = 2015) -> go.Figure:
+    g = growth[pd.to_datetime(growth["date"]).dt.year >= since_year].copy()
+    g["year"] = pd.to_datetime(g["date"]).dt.year
+    g["month"] = pd.to_datetime(g["date"]).dt.month
+    pivot = g.pivot_table(index="year", columns="month",
+                          values="new_objects_added", aggfunc="sum")
+    all_months = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"]
+    month_labels = [all_months[int(m) - 1] for m in pivot.columns]
+    fig = px.imshow(pivot, aspect="auto", color_continuous_scale="Viridis",
+                    labels=dict(x="Month", y="Year", color="New objects"),
+                    x=month_labels, text_auto=True)
+    return _dark(fig, f"Catalog inflow by month ({since_year}–present)", height=430)
+
+
+def fig_crossing_projection(growth: pd.DataFrame, target: float = 99_999.0) -> go.Figure:
+    g = growth.sort_values("date").tail(366)
+    x = pd.to_datetime(g["date"]).map(pd.Timestamp.toordinal).values
+    y = g["cumulative_catalog_size"].values.astype(float)
+    slope_per_day, intercept = np.polyfit(x, y, 1)
+
+    hist_dates = pd.to_datetime(g["date"])
+    future_end = hist_dates.max() + pd.Timedelta(days=int((target - y[-1]) / max(slope_per_day, 1)) + 30)
+    proj_x = pd.date_range(hist_dates.max(), future_end, periods=100)
+    proj_y = intercept + slope_per_day * proj_x.map(pd.Timestamp.toordinal)
+    crossing = None
+    if proj_y.max() >= target:
+        idx = int(np.argmax(proj_y >= target))
+        crossing = proj_x[idx]
+
+    fig = go.Figure()
+    fig.add_scatter(x=hist_dates, y=y, mode="lines", name="observed",
+                    line=dict(color="#4cc9f0"))
+    fig.add_scatter(x=proj_x, y=proj_y, mode="lines", name="linear trend",
+                    line=dict(color="#f8961e", dash="dash"))
+    fig.add_hline(y=target, line_dash="dash", line_color="#ff5d8f",
+                  annotation_text=f"public catalog hits {int(target):,}",
+                  annotation_font_size=10)
+    if crossing is not None:
+        years_away = (crossing - hist_dates.max()).days / 365.25
+        fig.add_annotation(x=crossing, y=target, showarrow=True, arrowhead=1,
+                           text=f"~{years_away:.1f} yr at current pace",
+                           font=dict(color="#ff5d8f"))
+    return _dark(fig, "Naive linear projection — public catalog size",
+                 yaxis_title="Cumulative objects", height=440)
+
+
+def fig_era_timeline() -> go.Figure:
+    eras = [
+        ("5-digit era", "1957-01-01", "2020-05-01", "#4cc9f0"),
+        ("Alpha-5 capable", "2020-05-01", "2026-07-11", "#f8961e"),
+        ("6-digit era", "2026-07-11", "2027-06-30", "#e63946"),
+    ]
+    fig = go.Figure()
+    for i, (label, start, end, color) in enumerate(eras[::-1]):
+        fig.add_trace(go.Scatter(
+            x=[pd.Timestamp(start), pd.Timestamp(end)], y=[i, i], mode="lines",
+            line=dict(color=color, width=18), name=label,
+            hovertemplate=f"{label}: {start[:4]} → {end[:4]}<extra></extra>",
+        ))
+    fig.update_yaxes(range=[-0.6, len(eras) - 0.4],
+                     tickvals=list(range(len(eras))),
+                     ticktext=[e[0] for e in eras])
+    return _dark(fig, "Catalog numbering eras", height=280)
+
+
+def fig_ground_track(gp: pd.DataFrame, max_points: int = 5000) -> go.Figure:
+    g = gp[gp["is_valid"]].dropna(subset=["subpoint_lat_deg"])
+    if len(g) > max_points:
+        g = g.sample(max_points, random_state=42)
+    fig = go.Figure(go.Scattergeo(
+        lat=g["subpoint_lat_deg"], lon=g["subpoint_lon_deg"],
+        mode="markers", marker=dict(size=2.5, color="#4cc9f0", opacity=0.5),
+        text=g["object_name"], hovertemplate="%{text}<extra></extra>",
+    ))
+    fig.update_geos(
+        projection_type="natural earth", showcountries=True, countrycolor="#444",
+        showcoastlines=True, coastlinecolor="#666", bgcolor="#111",
+        landcolor="#222", oceancolor="#111",
+    )
+    return _dark(fig, "Ground tracks at element epochs (WGS84 subpoints)",
+                 height=480)
