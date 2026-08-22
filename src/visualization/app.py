@@ -32,7 +32,11 @@ st.markdown(
 section.stMain, section.stMain div.block-container {
     background: #0d1015;
 }
-section.stMain div.block-container { padding-top: 1.1rem; max-width: 1500px; }
+section.stMain div.block-container {
+    /* clear the fixed top navigator: never reduce below ~4rem */
+    padding-top: 4.25rem !important;
+    max-width: 1500px;
+}
 
 /* metric cards */
 div[data-testid="stMetric"] {
