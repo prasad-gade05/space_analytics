@@ -112,3 +112,22 @@ Format rule: **OMM JSON only for GP data — never legacy TLE** (TLE cannot repr
 - Public SATCAT snapshot: **70,355 rows** (max catalog number 100,403)
 - Official growth series `growth.csv`: **25,435 daily rows** (1957 → 2026-08-21), Cataloged=70,355
 - GP active: **16,400 payloads** incl. **331 six-digit IDs** — proves OMM-JSON-only design decision
+
+## Task 5: Forecasting, Clustering, Publishing (COMPLETE)
+
+- [x] ARIMA(1,1,1) weekly forecast module w/ 80/20 holdout MAPE + CI + crossing detection (live: MAPE 6.8%, no public-catalog 100k crossing inside 5 yr - honest result)
+- [x] K-Means danger zones (k=4): Critical = Starlink 450-500 km shells (13% of objects, 63% of conjunction load)
+- [x] Both exported via Gold build and wired into Catalog Crisis / Atlas pages
+- [x] Kaggle/HF package builder (make package -> data/publish/orbital_commons_v1/) with HF-format DatasetReadme card
+- [x] Deploy docs: Streamlit Cloud steps, HF/Kaggle upload, Space-Track stretch goal
+- [ ] USER: push repo to GitHub; deploy on share.streamlit.io; upload dataset package
+
+## Project status vs kickstart plan
+
+| Week | Deliverable | Status |
+|---|---|---|
+| 1 | Bronze ingestion + GH Actions cron | DONE |
+| 2 | Silver physics layer | DONE |
+| 3 | Gold star schema + HHI/Gini/K-Means/Foster + pytest | DONE |
+| 4 | Streamlit dashboard + forecasting | DONE (deploy = user action) |
+| 5 | Dataset packaging + docs | DONE (upload = user action) |
