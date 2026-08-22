@@ -75,6 +75,7 @@ def test_foster_benchmark():
     topn = pd.DataFrame({
         "primary_name": ["A"], "secondary_name": ["B"],
         "max_probability": [0.19], "foster_pc": [0.57],
+        "pc_ratio_ours_vs_socrates": [2.97],
     })
     assert isinstance(figures.fig_foster_benchmark(topn), go.Figure)
 
@@ -86,3 +87,65 @@ def test_3d_snapshot():
         "is_valid": [True, True], "regime": ["VLEO", "MEO"],
     })
     assert isinstance(figures.fig_3d_snapshot(gp), go.Figure)
+
+
+def test_new_objects_daily():
+    growth = pd.DataFrame({
+        "date": pd.to_datetime(["2026-08-19", "2026-08-20", "2026-08-21"]),
+        "new_objects_added": [0, 3, 0],
+        "new_decayed": [0, 4, 0],
+    })
+    assert isinstance(figures.fig_new_objects_daily(growth), go.Figure)
+
+
+def test_conj_timeline_and_risk_matrix():
+    conj = pd.DataFrame({
+        "tca_utc": pd.to_datetime(["2026-08-23 04:00", "2026-08-23 06:00",
+                                   "2026-08-24 05:00", "2026-08-25 07:00"]),
+        "min_range_km": [0.016, 1.2, 5.0, 12.0],
+        "max_probability": [0.19, 1e-4, 1e-6, 1e-8],
+        "rel_speed_km_s": [14.9, 7.0, 10.0, 3.0],
+        "primary_regime": ["LEO-Constellation", "LEO-SSO", "MEO", None],
+        "primary_name": ["A", "B", "C", "D"],
+        "secondary_name": ["E", "F", "G", "H"],
+    })
+    assert isinstance(figures.fig_conj_timeline(conj), go.Figure)
+    assert isinstance(figures.fig_risk_matrix(conj), go.Figure)
+
+
+def test_altitude_inclination_launch_cadence():
+    objs = pd.DataFrame({
+        "is_on_orbit": [True] * 4,
+        "mean_altitude_km": [550.0, 800.0, 2100.0, 300.0],
+        "inclination_deg": [53.0, 98.0, 55.0, 51.0],
+        "object_type": ["PAY", "DEB", "PAY", "R/B"],
+        "launch_date": pd.to_datetime(["2019-05-24", "1999-01-01",
+                                       "2021-03-01", "1985-07-04"]),
+    })
+    assert isinstance(figures.fig_altitude_inclination(objs), go.Figure)
+    assert isinstance(figures.fig_launch_cadence(objs), go.Figure)
+
+
+def test_frontier_operator_share_stale_foster_hist():
+    objs = pd.DataFrame({
+        "is_on_orbit": [True] * 3,
+        "nation": ["US", "CIS", "PRC"],
+        "object_type": ["PAY", "DEB", "DEB"],
+        "object_id": [1, 2, 3],
+    })
+    assert isinstance(figures.fig_responsibility_frontier(objs), go.Figure)
+
+    attributed = pd.DataFrame(
+        {"on_orbit_objects": [100, 50]}, index=pd.Index(["SpaceX", "OneWeb"], name="op"))
+    assert isinstance(figures.fig_operator_share(attributed), go.Figure)
+
+    gp = pd.DataFrame({"is_valid": [True, True, False], "is_stale": [False, True, False]})
+    assert isinstance(figures.fig_stale_split(gp), go.Figure)
+
+    topn = pd.DataFrame({
+        "max_probability": [0.19, 0.15], "foster_pc": [0.57, 0.16],
+        "pc_ratio_ours_vs_socrates": [2.97, 1.05],
+        "primary_name": ["A", "B"], "secondary_name": ["C", "D"],
+    })
+    assert isinstance(figures.fig_foster_benchmark(topn), go.Figure)
+    assert isinstance(figures.fig_foster_ratio_hist(topn), go.Figure)
