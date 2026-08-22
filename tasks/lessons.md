@@ -40,3 +40,14 @@
    year-queries in one pass after a full block expiry; 6 s spacing got cut off
    at ~53 requests earlier the same hour. When blocked, wait quietly 45–60 min;
    do not let retries poke the block.
+
+## 2026-08-22 — HF dataset card YAML
+
+8. **Enum-looking metadata values must be checked against the live official list.**
+   `task_categories: tabular` looked plausible but is NOT in Hugging Face's
+   task vocabulary (valid: `tabular-classification`, `tabular-regression`,
+   `time-series-forecasting`, `other`, ...). HF only *warns* — it does not
+   fail the upload — so the bad value shipped silently. Rule: before writing any
+   controlled-vocabulary field (task_categories, size_categories, license ids,
+   Kaggle license codes), diff the value against the platform's published enum,
+   and prefer the honest generic bucket (`other`) over an inexact match.
