@@ -96,5 +96,30 @@ technical_reference.md            # schemas, formulas, assumptions, findings
 - Bronze: 11 datasets, 252k records/day-1, manifests with SHA-256
 - Silver: 19,634 unique GP objects validated (0 rejections), 70,355-row catalog,
   148,985 conjunction events
-- Gold: DuckDB star schema + git-committed exports
-- Tests: 29 passing · CI: nightly ingest-and-build workflow
+- Gold: DuckDB star schema + git-committed exports incl. ARIMA forecast and
+  K-Means danger-zone clustering of altitude bands
+- Tests: 34 passing · CI: nightly ingest-and-build workflow
+
+## Publishing & deployment
+
+**Dataset package (Kaggle / Hugging Face):**
+
+```bash
+make package    # assembles data/publish/orbital_commons_v1/ (+ checksum manifest)
+```
+
+Upload the folder contents to Hugging Face (`huggingface-cli upload <user>/orbital-commons ...`)
+or Kaggle ("New Dataset" -> drag folder). The included `DatasetReadme.md` is a
+HF-format card with license, column dictionary, provenance citation and limitations.
+
+**Live dashboard (Streamlit Community Cloud):**
+
+1. Push this repo to GitHub.
+2. share.streamlit.io -> New app -> pick repo -> main file `src/visualization/app.py`.
+3. Python 3.13; dependencies resolve from `requirements.txt`. The app reads only
+   committed files under `data/gold/exports/`, so it deploys with zero secrets;
+   the nightly Action keeps them fresh.
+
+**Space-Track enrichment (stretch goal):** submit the account application
+(up to 30-day approval); wire `cdm_public`/`decay` pulls as an optional module
+once approved - the pipeline deliberately does not depend on it.

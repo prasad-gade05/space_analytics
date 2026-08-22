@@ -12,6 +12,9 @@ silver:
 gold:
 	python -m src.modeling.build_gold
 
+package:
+	python -m src.pipeline.build_publish
+
 test:
 	python -m pytest tests -q
 
