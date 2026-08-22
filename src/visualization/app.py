@@ -95,10 +95,21 @@ div[data-testid="stCode"] { border: 1px solid var(--line) !important; border-rad
 /* scrollbar */
 ::-webkit-scrollbar { width: 9px; height: 9px; }
 ::-webkit-scrollbar-thumb { background: #2a2f39; border-radius: 6px; }
+
+/* footer */
+.footer {
+    margin-top: 2rem; padding: 14px 0 6px;
+    border-top: 1px solid var(--line);
+    text-align: center; font-size: .82rem; color: var(--text-dim);
+}
+.footer a { color: #7dd3fc; text-decoration: none; }
+.footer a:hover { text-decoration: underline; }
 </style>
 """,
     unsafe_allow_html=True,
 )
+
+GITHUB_REPO_URL = "https://github.com/prasad-gade05/space_analytics"
 
 OFFICIAL_COUNTER = 100_403  # max catalog number ever assigned (USSF, 2026-07-11)
 SARAMAGO_DAY = pd.Timestamp("2026-07-11")
@@ -710,3 +721,15 @@ PAGES = [
 
 nav = st.navigation(PAGES, position="top")
 nav.run()
+
+st.markdown(
+    f"""
+<div class="footer">
+    Made by <a href="https://prasadgade.dev" target="_blank">Prasad Gade</a>
+    &nbsp;&middot;&nbsp;
+    <a href="{GITHUB_REPO_URL}" target="_blank">GitHub Repository</a>
+    &nbsp;&middot;&nbsp; data &copy; CelesTrak / USSF 18 SDS
+</div>
+""",
+    unsafe_allow_html=True,
+)
