@@ -1,6 +1,6 @@
 # Orbital Commons — Task Plan
 
-## Task 1: Bronze Layer — Download All Raw Data (IN PROGRESS)
+## Task 1: Bronze Layer — Download All Raw Data (COMPLETE)
 
 All sources are free, no-auth CelesTrak endpoints (per kickstart Section 2, 100%-free-only strategy).
 Format rule: **OMM JSON only for GP data — never legacy TLE** (TLE cannot represent 6-digit catalog numbers post July-2026 overflow).
@@ -36,7 +36,26 @@ Format rule: **OMM JSON only for GP data — never legacy TLE** (TLE cannot repr
 - [x] Idempotency proof: rerun validates from cache in seconds, zero network
 - [x] Manual Audit Checkpoint: sample data presented to user for confirmation → Silver layer approved to start
 
-## Review / Audit Results (2026-08-22)
+## Task 2: Silver Layer — Physics-Validated Clean Tables
+
+### Plan (loop: think→analyze→verify→plan→implement→verify)
+
+- [x] VERIFY env/APIs: skyfield 1.55 has `EarthSatellite.from_omm`; SARAMAGO propagates to 510 km vs SATCAT 496–509 ✓
+- [ ] `src/utils/alpha5.py` — bidirectional Alpha-5↔int codec (A=10..Z=33, skip I/O, ceiling Z9999=339999)
+- [ ] `src/utils/paths.py` — central path constants
+- [ ] `src/transformation/shells.py` — semi-major axis from mean motion; perigee/apogee; canonical regime bins + 25 km bands
+- [ ] `src/transformation/silver_gp.py` — OMM→validated objects: dedup by CATNR keep freshest epoch, SGP4 propagate @epoch, TEME→geodetic via skyfield, validation gates (perigee>0, e∈[0,1), sgp4 error), staleness flag (>14 d), shell assignment
+- [ ] `src/transformation/silver_satcat.py` — typed SATCAT (dates, numerics, object_type, ops_status, on_orbit flag)
+- [ ] `src/transformation/silver_socrates.py` — typed conjunction events (TCA parse, floats, pair IDs)
+- [ ] `src/transformation/silver_growth.py` — growth series → dated parquet + daily delta
+- [ ] `src/pipeline/run_silver.py` — orchestrator → data/silver/*.parquet + quality report JSON
+- [ ] tests/test_alpha5.py, test_shells.py, test_silver_transforms.py → pytest green
+- [ ] Run on real Bronze data; audit outputs (row counts, null rates, rejection reasons)
+
+### Design decisions
+- Rejected rows are KEPT with `reject_reason` (data-quality KPI input), never silently dropped
+- Propagation at element epoch (deterministic; no wall-clock dependency in outputs except staleness flag computed against run date)
+- μ=398600.4418 km³/s², R=6378.137 km consistent with SATCAT apogee/perigee convention
 
 **Final state: 11 ok / 0 fail / 6 informational warnings. 252,208 records, ~38 MB total.**
 
@@ -69,7 +88,3 @@ Format rule: **OMM JSON only for GP data — never legacy TLE** (TLE cannot repr
 - Public SATCAT snapshot: **70,355 rows** (max catalog number 100,403)
 - Official growth series `growth.csv`: **25,435 daily rows** (1957 → 2026-08-21), Cataloged=70,355
 - GP active: **16,400 payloads** incl. **331 six-digit IDs** — proves OMM-JSON-only design decision
-
-## Review / Audit Results
-
-(pending execution)

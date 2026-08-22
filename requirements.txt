@@ -1,0 +1,13 @@
+# Orbital Commons — core pipeline dependencies
+pandas>=2.2
+pyarrow>=17
+duckdb>=1.1
+sgp4>=2.23
+skyfield>=1.16
+scikit-learn>=1.5
+numpy>=1.26
+pytest>=8
+
+# Dashboard
+streamlit>=1.38
+plotly>=5.24
