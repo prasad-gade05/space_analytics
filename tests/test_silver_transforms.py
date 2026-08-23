@@ -5,11 +5,14 @@ import pandas as pd
 import pytest
 
 from src.transformation import silver_datasets, silver_gp
+from src.utils.paths import GP_DIR, latest_bronze_file
 
 
 @pytest.fixture(scope="module")
 def saramago_record():
-    with open("data/bronze/gp/gp_active_2026-08-22.json", encoding="utf-8") as fh:
+    with latest_bronze_file(GP_DIR, "gp_active", ".json").open(
+        encoding="utf-8"
+    ) as fh:
         records = json.load(fh)
     return next(r for r in records if int(r["NORAD_CAT_ID"]) == 100_000)
 
