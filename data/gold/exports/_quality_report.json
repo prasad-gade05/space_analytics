@@ -1,16 +1,16 @@
 {
   "gp_objects": {
-    "rows": 19618,
-    "valid": 19618,
+    "rows": 19650,
+    "valid": 19650,
     "rejected": 0,
     "reject_reasons": {},
-    "stale": 161,
-    "six_digit_ids": 693,
+    "stale": 156,
+    "six_digit_ids": 724,
     "regime_counts": {
-      "LEO-Constellation": 13010,
-      "LEO-SSO": 2850,
-      "Legacy-Debris": 1730,
-      "VLEO": 1125,
+      "LEO-Constellation": 13016,
+      "LEO-SSO": 2853,
+      "Legacy-Debris": 1733,
+      "VLEO": 1145,
       "GEO": 584,
       "MEO": 243,
       "Upper-LEO": 62,
@@ -18,25 +18,25 @@
     }
   },
   "satcat": {
-    "rows": 70355,
-    "on_orbit": 34858,
+    "rows": 70382,
+    "on_orbit": 34881,
     "object_types": {
       "DEB": 35838,
-      "PAY": 27471,
+      "PAY": 27495,
       "R/B": 6882,
-      "UNK": 164
+      "UNK": 167
     }
   },
   "conjunctions": {
-    "rows": 149754,
-    "tca_min": "2026-08-23 10:00:00.484000",
-    "tca_max": "2026-08-30 09:59:57.953000",
-    "prob_ge_1e_4": 5181,
-    "prob_ge_1e_2": 293
+    "rows": 148995,
+    "tca_min": "2026-08-24 22:00:03.745000",
+    "tca_max": "2026-08-31 21:59:59.809000",
+    "prob_ge_1e_4": 5041,
+    "prob_ge_1e_2": 249
   },
   "catalog_growth": {
-    "rows": 25437,
-    "last_date": "2026-08-23",
-    "last_cataloged": 70355
+    "rows": 25439,
+    "last_date": "2026-08-25",
+    "last_cataloged": 70382
   }
 }
