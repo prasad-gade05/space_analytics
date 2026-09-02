@@ -1,14 +1,14 @@
 {
   "gp_objects": {
-    "rows": 19749,
-    "valid": 19749,
+    "rows": 19748,
+    "valid": 19748,
     "rejected": 0,
     "reject_reasons": {},
-    "stale": 133,
+    "stale": 131,
     "six_digit_ids": 845,
     "regime_counts": {
       "LEO-Constellation": 13035,
-      "LEO-SSO": 2853,
+      "LEO-SSO": 2852,
       "Legacy-Debris": 1729,
       "VLEO": 1227,
       "GEO": 582,
