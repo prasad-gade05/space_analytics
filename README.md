@@ -29,9 +29,9 @@ No accounts, no API keys — clone and run.
 ## Architecture
 
 ```
-CelesTrak GP (OMM JSON, 13 groups)   ┐
-SATCAT full snapshot (year sweep)    ├─▶ Bronze  data/bronze/   raw bytes + sha256 manifests
-SOCRATES bulk CSV + growth.csv       ┘
+CelesTrak GP (OMM JSON, 6 groups)     ┐
+SATCAT history (committed) + yr sweep ├─▶ Bronze  data/bronze/   raw bytes + sha256 manifests
+SOCRATES bulk CSV + growth.csv        ┘
         │
         ▼  Alpha-5 codec · dedup · SGP4@epoch · TEME→geodetic · validation gates · shells
 Silver  data/silver/*.parquet          (+ _quality_report.json)
@@ -65,15 +65,16 @@ streamlit run src/visualization/app.py
 
 | Source              | Endpoint                                                  | Cadence here                             |
 | ------------------- | --------------------------------------------------------- | ---------------------------------------- |
-| GP orbital elements | `celestrak.org/NORAD/elements/gp.php?GROUP=…&FORMAT=JSON` | daily                                    |
-| SATCAT snapshot     | `records.php?INTDES=<year>&FORMAT=CSV` sweep (1957→now)   | baseline cached once; current year daily |
+| GP orbital elements | `celestrak.org/NORAD/elements/gp.php?GROUP=…&FORMAT=JSON` | daily (6 groups: active, analyst, last-30-days, 3 debris clouds) |
+| SATCAT snapshot     | `records.php?INTDES=<year>&FORMAT=CSV` sweep (1957→now)   | history committed + ~20 yrs re-fetched per run (full refresh ≈ 4 days); current year daily |
 | SOCRATES Plus       | `celestrak.org/SOCRATES/sort-minRange.csv`                | each run (~3×/day upstream)              |
 | Growth history      | `celestrak.org/satcat/growth.csv`                         | daily                                    |
 | Boxscore            | `celestrak.org/satcat/boxscore.php`                       | daily                                    |
 
 All use of CelesTrak follows their published usage policy (identified User-Agent,
-polite pacing ≥3 s, incremental caching). Space-Track.org and ESA DISCOS were
-evaluated and deliberately dropped — see `technical_reference.md`.
+polite pacing ≥3 s, incremental caching, hard fail-fast on any non-200 response).
+Space-Track.org and ESA DISCOS were evaluated and deliberately dropped — see
+`technical_reference.md`.
 
 ## Repository map
 

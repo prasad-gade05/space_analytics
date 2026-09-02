@@ -25,12 +25,29 @@ data files in this repository unless marked as upstream constants.
    `NORAD_CAT_ID_1, OBJECT_NAME_1, DSE_1, NORAD_CAT_ID_2, OBJECT_NAME_2, DSE_2,
    TCA, TCA_RANGE, TCA_RELATIVE_SPEED, MAX_PROB, DILUTION`.
    There is no MIN_RANGE column; range-at-TCA is `TCA_RANGE`.
-4. **Incremental sweep with per-year cache.** Historical launch years never gain
-   objects; each year file is persisted atomically on arrival under
-   `data/bronze/satcat/years/`. Steady state ≈ 2 requests/run.
-5. **Rate limiting.** ~80 requests in ~15 min triggers an IIS-level 403 site block
-   lasting ≥ 30–60 min. Mitigations: UA identification, ≥3 s pacing (10 s during
-   sweeps), 300 s cooldown on 403, skip-if-exists idempotency.
+4. **Incremental sweep with committed cache + rotating refresh.** Historical
+   launch years are committed under `data/bronze/satcat/years/` (baseline), but
+   rows can still change after launch (decay dates, status) and objects are
+   occasionally cataloged late under an old launch-year designator. Each run
+   re-fetches a rotating date-keyed slice of ~20 historical years (stateless,
+   deterministic — no state file needed): full history refreshes every
+   `ceil(<n historical>/20)` runs (4 runs ≈ 4 days at 69 years). The current
+   year is stored outside `years/` and fetched fresh every run. Steady state
+   ≈ 27 requests/run (6 GP groups + ~17 rotated years + current year +
+   growth + boxscore + SOCRATES).
+5. **Rate limiting / fail-fast.** ~80 requests in ~15 min triggers an IIS-level
+   403 site block lasting ≥ 30–60 min; CelesTrak firewall-bans any IP sending
+   > 50 HTTP errors in 2 h. Mitigations: minimal request set, UA identification,
+   ≥ 3 s pacing (10 s during historical bootstraps), skip-if-exists idempotency,
+   and **hard fail-fast on any non-200 response** (no retries on HTTP errors —
+   only transport-level failures retry once). Any HTTP error aborts the whole
+   run and is recorded in `_run_summary.json` under `abort`.
+6. **GP group subset.** Only `active`, `analyst`, `last-30-days` and the three
+   debris clouds are downloaded. The constellation/geo groups are strict
+   subsets of `active` (verified against 2026-08-22 snapshots: starlink
+   10,973/10,973, oneweb 651/651, kuiper 391/391, qianfan 238/238, hulianwang
+   199/199, geo 568/568 already inside active), and silver-layer dedup collapses
+   duplicated rows — downloading them was pure request overhead.
 
 ## 3. Silver transformations
 

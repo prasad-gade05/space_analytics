@@ -4,7 +4,9 @@ on:
   schedule:
     # Full pipeline daily. SOCRATES refreshes ~3x/day upstream; a daily pull
     # keeps CI minutes low while the conjunction table stays < 24h stale.
-    - cron: "0 6 * * *"
+    # 06:37, not 06:00: GitHub delays scheduled runs most at the start of
+    # every hour (docs: "High load times include the start of every hour").
+    - cron: "37 6 * * *"
   workflow_dispatch:
     inputs:
       force_bronze:
@@ -14,6 +16,11 @@ on:
 
 permissions:
   contents: write
+
+# Never pile up overlapping runs (delayed cron + manual dispatch).
+concurrency:
+  group: ingest-and-build
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -30,7 +37,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Bronze ingestion (CelesTrak, polite pacing)
+      - name: Bronze ingestion (CelesTrak, fail-fast on HTTP errors)
         run: |
           ARGS=""
           if [ "${{ github.event.inputs.force_bronze }}" = "true" ]; then ARGS="--force"; fi

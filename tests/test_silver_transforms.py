@@ -10,9 +10,12 @@ from src.utils.paths import GP_DIR, latest_bronze_file
 
 @pytest.fixture(scope="module")
 def saramago_record():
-    with latest_bronze_file(GP_DIR, "gp_active", ".json").open(
-        encoding="utf-8"
-    ) as fh:
+    try:
+        gp_path = latest_bronze_file(GP_DIR, "gp_active", ".json")
+    except FileNotFoundError:
+        pytest.skip("no bronze GP snapshot in data/bronze/gp — run "
+                    "src/ingestion/fetch_bronze.py first")
+    with gp_path.open(encoding="utf-8") as fh:
         records = json.load(fh)
     return next(r for r in records if int(r["NORAD_CAT_ID"]) == 100_000)
 

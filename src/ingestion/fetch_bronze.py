@@ -5,6 +5,26 @@ Idempotent: filenames are date-stamped and same-day files that already
 exist are skipped unless --force is passed. Raw bytes are stored exactly
 as served; strict schema enforcement happens downstream in Silver.
 
+CelesTrak usage policy compliance (celestrak.org/usage-policy.php):
+- Fail fast on ANY non-200 response: stop the whole run, never retry an
+  HTTP error. Repeated errors are what push an IP into their firewall
+  (>50 HTTP errors / 2 h). Only transport-level failures (DNS/connect/
+  read) retry, once, after a short cooldown; if the host is still
+  unreachable the run aborts there as well.
+- Minimal request set (~10/run): 6 GP groups, current SATCAT year,
+  growth, boxscore, SOCRATES. Constellation/geo groups are strict
+  subsets of GROUP=active (verified against 2026-08-22 snapshots) and
+  are no longer downloaded; silver-layer dedup made them pure copies.
+- Historical SATCAT years (1957..current-1) are immutable and committed
+  to the repo (data/bronze/satcat/years/), so ephemeral CI runners
+  never re-sweep 70 years. SATCAT rows can still change after launch
+  (decay dates, status) and objects are occasionally cataloged late
+  under an old launch-year designator, so a rotating slice of ~20
+  historical years is re-fetched every run (date-keyed, stateless):
+  full history refreshes every 4 runs. The current year is always
+  fetched fresh into data/bronze/satcat/ (not years/) so a mid-year
+  snapshot can never masquerade as a completed historical year.
+
 Design decisions (documented per kickstart spec Section 2):
 - GP data ingested as OMM JSON only. Legacy TLE cannot represent catalog
   numbers above 99999, mandatory since 2026-07-11 (catalog > 100,000).
@@ -22,23 +42,24 @@ import csv
 import hashlib
 import io
 import json
+import math
 import sys
 import time
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BRONZE_DIR = REPO_ROOT / "data" / "bronze"
 
-USER_AGENT = "OrbitalCommons-BronzeIngest/0.1 (local development)"
+USER_AGENT = "OrbitalCommons-BronzeIngest/0.2 (+https://github.com/prasad-gade05/space_analytics)"
 REQUEST_TIMEOUT_S = 180
-RETRIES = 3
-RETRY_BACKOFF_S = 15
-THROTTLE_BACKOFF_S = 300      # CelesTrak throttles bursts with 403s; long cooldown
+NETWORK_RETRIES = 1             # transport-level failures only (never HTTP errors)
+NETWORK_RETRY_BACKOFF_S = 30
 POLITE_DELAY_S = 3
-SATCAT_SWEEP_DELAY_S = 10     # first-run historical sweep pacing
+SATCAT_SWEEP_DELAY_S = 10     # per-year pacing on historical fetches
+SATCAT_REFRESH_PER_RUN = 20   # rotating slice: historical years re-fetched per run
 
 GP_BASE = "https://celestrak.org/NORAD/elements/gp.php"
 SATCAT_RECORDS_BASE = "https://celestrak.org/satcat/records.php"
@@ -46,17 +67,18 @@ SATCAT_GROWTH_URL = "https://celestrak.org/satcat/growth.csv"
 BOXSCORE_URL = "https://celestrak.org/satcat/boxscore.php"
 SOCRATES_CSV_URL = "https://celestrak.org/SOCRATES/sort-minRange.csv"
 
-# Slugs verified against https://celestrak.org/NORAD/elements/ on 2026-08-22.
+# Groups downloaded daily (trimmed 2026-09-02 per CelesTrak usage policy:
+# "There is no reason to download all of the GROUPs"). Kept: the four datasets
+# whose records are NOT obtainable through GROUP=active, plus active itself.
+# Dropped as strict duplicates of active, verified against the 2026-08-22
+# bronze snapshots: starlink 10,973/10,973, oneweb 651/651, kuiper 391/391,
+# qianfan 238/238, hulianwang 199/199, geo 568/568 records already present in
+# active; stations contributed only 2 unique objects (still covered by SATCAT
+# in every fact table). Silver-layer dedup collapses duplicated rows, so the
+# constellation groups were pure request overhead.
 GP_GROUPS: dict[str, str] = {
     "active": "All active payloads (core dataset)",
     "analyst": "Analyst satellites (8xxxx / 27xxxx ranges)",
-    "starlink": "Starlink constellation",
-    "oneweb": "OneWeb/Eutelsat constellation",
-    "kuiper": "Amazon Kuiper constellation",
-    "qianfan": "Qianfan (Thousand Sails) constellation",
-    "hulianwang": "Hulianwang Digui (Guowang) constellation",
-    "stations": "Space stations",
-    "geo": "Active geosynchronous satellites",
     "last-30-days": "Last 30 days launches",
     "fengyun-1c-debris": "FENGYUN 1C ASAT test debris",
     "iridium-33-debris": "Iridium 33 collision debris",
@@ -77,27 +99,67 @@ REQUIRED_OMM_KEYS = {"OBJECT_NAME", "NORAD_CAT_ID", "EPOCH"}
 GROWTH_HEADER = {"date", "cataloged", "decayed", "on orbit"}
 
 
+class StopQueries(RuntimeError):
+    """Base for conditions that must halt every further query this run."""
+
+
+class CelesTrakHTTPError(StopQueries):
+    """Any non-200 HTTP response from CelesTrak.
+
+    The usage policy is explicit: M2M clients must stop querying immediately
+    on non-200 responses. "if you receive an HTTP 403 or 404 error, the
+    response is not going to change by repeating the request and can result
+    in your IP address being put in the firewall" (>50 HTTP errors in 2 h).
+    """
+
+    def __init__(self, url: str, code: int):
+        self.url = url
+        self.code = code
+        super().__init__(
+            f"HTTP {code} from {url} — stopping all CelesTrak queries "
+            f"immediately per usage policy (HTTP errors are never retried)"
+        )
+
+
+class CelesTrakTransportError(StopQueries):
+    """Host unreachable (DNS/connect/read) after the transport retry.
+
+    If the host cannot be reached twice in a row, no other URL against the
+    same host will succeed either — continuing would just burn the job
+    timeout one URL at a time (the exact failure mode that caused past
+    45-minute CI timeouts).
+    """
+
+
 def _http_get(url: str) -> bytes:
-    """GET a URL with retries; long cooldown on HTTP 403 (rate-limit)."""
+    """GET a URL with CelesTrak-policy-compliant failure handling.
+
+    - HTTP errors (403/404/5xx): raise CelesTrakHTTPError immediately — no
+      retries, no fallback to other URLs. Callers must let it propagate so
+      the whole run aborts instead of hammering a throttled endpoint.
+    - Transport failures (DNS, connect, read timeouts): one retry after a
+      short cooldown; if the retry also fails, raise CelesTrakTransportError
+      to abort the run.
+    """
     last_err: Exception | None = None
-    for attempt in range(1, RETRIES + 1):
+    for attempt in range(1, NETWORK_RETRIES + 2):
         req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
         try:
             with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_S) as resp:
                 if resp.status != 200:
-                    raise urllib.error.HTTPError(url, resp.status, "non-200", resp.headers, None)
+                    raise CelesTrakHTTPError(url, resp.status)
                 return resp.read()
         except urllib.error.HTTPError as err:
+            raise CelesTrakHTTPError(url, err.code) from err
+        except (urllib.error.URLError, TimeoutError, ConnectionError, OSError) as err:
             last_err = err
-            print(f"    attempt {attempt}/{RETRIES} failed: {err}")
-            if attempt < RETRIES:
-                time.sleep(THROTTLE_BACKOFF_S if err.code in (403, 429) else RETRY_BACKOFF_S)
-        except Exception as err:  # noqa: BLE001 - retry any transport failure
-            last_err = err
-            print(f"    attempt {attempt}/{RETRIES} failed: {err}")
-            if attempt < RETRIES:
-                time.sleep(RETRY_BACKOFF_S * attempt)
-    raise RuntimeError(f"All {RETRIES} attempts failed for {url}") from last_err
+            print(f"    attempt {attempt}/{NETWORK_RETRIES + 1} transport failure: {err}")
+            if attempt <= NETWORK_RETRIES:
+                time.sleep(NETWORK_RETRY_BACKOFF_S)
+    raise CelesTrakTransportError(
+        f"Host unreachable after {NETWORK_RETRIES + 1} attempts for {url} "
+        f"— aborting run (last error: {last_err})"
+    ) from last_err
 
 
 def _sha256(payload: bytes) -> str:
@@ -193,7 +255,9 @@ def ingest_gp(today: str, force: bool) -> list[dict]:
                                   record_count, warning))
             print(f"    -> {record_count:,} records ({len(payload):,} bytes)"
                   f"{(' WARN: ' + warning) if warning else ''}")
-        except Exception as err:  # noqa: BLE001
+        except StopQueries:
+            raise
+        except Exception as err:  # noqa: BLE001 - content problems fail this group only
             results.append(_fail_entry(f"gp_{group}", description, url, err))
             print(f"    -> FAIL: {err}")
         time.sleep(POLITE_DELAY_S)
@@ -203,19 +267,28 @@ def ingest_gp(today: str, force: bool) -> list[dict]:
 def ingest_satcat_full_sweep(today: str, force: bool) -> dict:
     """Build the complete SATCAT snapshot incrementally.
 
-    Historical years (1957..current-1) never gain new objects: each is
-    fetched once and cached under satcat/years/, then reused on every run.
-    Only the current year is re-fetched (new catalogs + decay updates),
-    and only if not already fetched today. Every year is persisted to disk
-    the moment it arrives, so a mid-sweep failure resumes cheaply.
-    Pass --force to refresh historical years.
+    Historical years (1957..current-1) are committed under satcat/years/
+    as the baseline cache, but rows can still change after launch (decay
+    dates, operational status) and new objects are occasionally cataloged
+    late under an old launch-year designator. Each run therefore
+    re-fetches a rotating, date-keyed slice of historical years
+    (SATCAT_REFRESH_PER_RUN, stateless — CI has no persistent state), so
+    the full history refreshes every ceil(<n>/20) runs (~4 days at 69
+    years). The current year is stored OUTSIDE years/
+    (satcat/satcat_year_<year>.csv) and is always fetched fresh: it gains
+    objects all year, and a mid-year snapshot must never masquerade as a
+    completed historical cache. In the first run of a new calendar year
+    the just-finished year is fetched once into years/, where it freezes.
+    Pass --force to refresh all historical years immediately.
     """
     dataset = "satcat_full"
     description = (
         "Complete SATCAT snapshot assembled from documented "
         "records.php?INTDES=<year>&FORMAT=CSV queries. Historical years are "
-        "cached in satcat/years/ after first fetch; current year refreshed "
-        "daily. /pub/satcat.csv was rejected: capped at legacy IDs < 70000."
+        "cached (and committed) under satcat/years/; a rotating slice of "
+        f"~{SATCAT_REFRESH_PER_RUN} is re-fetched each run; current year "
+        "fetched fresh every run into satcat/. "
+        "/pub/satcat.csv was rejected: capped at legacy IDs < 70000."
     )
     current_year = datetime.now(timezone.utc).year
     years = list(range(1957, current_year + 1))
@@ -240,6 +313,16 @@ def ingest_satcat_full_sweep(today: str, force: bool) -> dict:
 
     print(f"[satcat] running incremental year sweep ({years[0]}..{years[-1]}, "
           f"{len(years)} years) ...")
+    # Rotating refresh slice: date-keyed so it is deterministic and needs no
+    # persisted state. Consecutive runs walk through all buckets, covering
+    # every historical year within `cycle` runs.
+    historical = [y for y in years if y != current_year]
+    cycle = max(1, math.ceil(len(historical) / SATCAT_REFRESH_PER_RUN))
+    bucket = (datetime.now(timezone.utc).date() - date(1957, 1, 1)).days % cycle
+    refresh_years = set(historical[bucket::cycle])
+    print(f"[satcat] rotation bucket {bucket + 1}/{cycle}: re-fetching "
+          f"{len(refresh_years)} historical year(s) this run "
+          f"(full history refreshed every {cycle} runs)")
     parts: list[bytes] = []
     header_line: bytes | None = None
     total_rows = 0
@@ -248,14 +331,13 @@ def ingest_satcat_full_sweep(today: str, force: bool) -> dict:
     try:
         for i, year in enumerate(years, 1):
             is_current = (year == current_year)
-            year_file = years_dir / f"satcat_year_{year}.csv"
-            cache_fresh_today = (
-                year_file.exists()
-                and datetime.fromtimestamp(year_file.stat().st_mtime, timezone.utc)
-                .date().isoformat() == today
-            )
-            use_cache = not force and year_file.exists() and (
-                not is_current or cache_fresh_today
+            year_dir = subdir if is_current else years_dir
+            year_file = year_dir / f"satcat_year_{year}.csv"
+            use_cache = (
+                not force
+                and not is_current
+                and year_file.exists()
+                and year not in refresh_years
             )
             if use_cache:
                 payload = year_file.read_bytes()
@@ -264,7 +346,7 @@ def ingest_satcat_full_sweep(today: str, force: bool) -> dict:
             else:
                 url = f"{SATCAT_RECORDS_BASE}?INTDES={year}&FORMAT=CSV"
                 payload = _http_get(url)
-                years_dir.mkdir(parents=True, exist_ok=True)
+                year_dir.mkdir(parents=True, exist_ok=True)
                 tmp = year_file.with_suffix(".tmp")
                 tmp.write_bytes(payload)
                 tmp.replace(year_file)  # atomic-ish persist as we go
@@ -306,7 +388,9 @@ def ingest_satcat_full_sweep(today: str, force: bool) -> dict:
         print(f"    -> {total_rows:,} rows ({len(combined):,} bytes); "
               f"fetched {len(fetched_now)} years now, reused {len(from_cache)} cached")
         return entry
-    except Exception as err:  # noqa: BLE001
+    except StopQueries:
+        raise
+    except Exception as err:  # noqa: BLE001 - content problems fail this dataset only
         print(f"    -> FAIL: {err}")
         return _fail_entry(dataset, description,
                            f"{SATCAT_RECORDS_BASE}?INTDES=<1957..{current_year}>&FORMAT=CSV", err)
@@ -352,7 +436,9 @@ def ingest_satcat_extras(today: str, force: bool) -> list[dict]:
             results.append(_entry(job["dataset"], job["note"], job["url"], payload, saved,
                                   None, warning))
             print(f"    -> {len(payload):,} bytes{(' WARN: ' + warning) if warning else ''}")
-        except Exception as err:  # noqa: BLE001
+        except StopQueries:
+            raise
+        except Exception as err:  # noqa: BLE001 - content problems fail this dataset only
             results.append(_fail_entry(job["dataset"], job["note"], job["url"], err))
             print(f"    -> FAIL: {err}")
         time.sleep(POLITE_DELAY_S)
@@ -411,7 +497,9 @@ def ingest_socrates(today: str, force: bool) -> list[dict]:
         results.append(_entry(dataset, description, SOCRATES_CSV_URL, payload, saved,
                               rows, warning))
         print(f"    -> {rows:,} conjunctions ({len(payload):,} bytes)")
-    except Exception as err:  # noqa: BLE001
+    except CelesTrakHTTPError:
+        raise
+    except Exception as err:  # noqa: BLE001 - content problems fail this dataset only
         results.append(_fail_entry(dataset, description, SOCRATES_CSV_URL, err))
         print(f"    -> FAIL: {err}")
     return results
@@ -424,21 +512,30 @@ def main() -> int:
     today = now.strftime("%Y-%m-%d")
     print(f"=== Orbital Commons Bronze ingestion — {now.isoformat(timespec='seconds')} ===\n")
 
-    all_results = (
-        ingest_gp(today, force)
-        + [ingest_satcat_full_sweep(today, force)]
-        + ingest_satcat_extras(today, force)
-        + ingest_socrates(today, force)
-    )
+    abort: CelesTrakHTTPError | None = None
+    all_results: list[dict] = []
+    try:
+        all_results = (
+            ingest_gp(today, force)
+            + [ingest_satcat_full_sweep(today, force)]
+            + ingest_satcat_extras(today, force)
+            + ingest_socrates(today, force)
+        )
+    except StopQueries as err:
+        abort = err
+        print(f"\n!! ABORTED — no further CelesTrak queries this run: {err}")
+        print("!! CelesTrak policy: stop on any non-200 and report to a human.")
+        print("!! Temporary blocks auto-expire ~2 h after queries stop.")
 
     failures = [r for r in all_results if r["status"] == "FAIL"]
     warns = [r for r in all_results if r["status"] == "WARN"]
 
     manifest = {
         "run_started_at_utc": now.isoformat(timespec="seconds"),
-        "pipeline_version": "bronze-0.1",
+        "pipeline_version": "bronze-0.2",
         "schema_version": "omm-json-1.0 + satcat-csv-1.0 + growth-csv-1.0 + socrates-csv-rfc4180",
         "force": force,
+        "abort": str(abort) if abort else None,
         "results": all_results,
         "totals": {
             "sources_attempted": len(all_results),
@@ -477,6 +574,7 @@ def main() -> int:
         print("FAILURES:")
         for r in failures:
             print(f"  - {r['dataset']}: {r['warning']}")
+    if failures or abort:
         return 1
     return 0
 

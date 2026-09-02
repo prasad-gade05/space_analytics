@@ -1,5 +1,22 @@
 # Orbital Commons — Task Plan
 
+## Task 6: CI/CD Hardening — CelesTrak Policy Compliance (COMPLETE 2026-09-02)
+
+Investigation: `tasks/cicd_investigation.md` (403/503/timeout failure modes, root causes, sources).
+Fix: fail-fast on any non-200 (no HTTP-error retries — they escalate to firewall bans);
+GP groups 13 → 6 (constellation/geo groups verified as strict subsets of `active`);
+historical SATCAT years committed with a rotating refresh slice of 20 years/run
+(full history refreshed every 4 days, decay/status updates picked up automatically);
+cron moved off the top of the hour (`37 6 * * *`) + concurrency guard.
+
+- [x] Fetcher: `StopQueries` hierarchy, whole-run abort on HTTP error / unreachable host
+- [x] Request budget: 86 → ~27 per run (CI simulation, 0 failures)
+- [x] Rotating sweep verified: 52 cache-reused / 17 rotated + 1 current-year fetched; 4 date buckets cover all 69 historical years exactly once
+- [x] Full pipeline green in CI simulation (silver 6 s, gold 12 s, 39 tests passed)
+- [x] Mock-server verification: 403/503/unreachable each abort in seconds with manifest `abort` record
+- [ ] USER: commit the 69 historical year files (`git add -A`) with the code changes
+- [ ] Watch ≥ 5 scheduled runs for green status, ~12 min duration, no start-time drift
+
 ## Task 1: Bronze Layer — Download All Raw Data (COMPLETE)
 
 All sources are free, no-auth CelesTrak endpoints (per kickstart Section 2, 100%-free-only strategy).

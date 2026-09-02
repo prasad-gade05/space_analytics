@@ -6,6 +6,16 @@ data/*
 data/gold/*
 !data/gold/exports
 
+# Historical SATCAT year files are immutable once their year completes and
+# are committed so ephemeral CI runners never re-sweep 1957..last-year.
+# The current year's file is kept OUTSIDE years/ (data/bronze/satcat/) by
+# fetch_bronze.py precisely so it stays ignored by data/bronze/satcat/*.
+!data/bronze
+data/bronze/*
+!data/bronze/satcat
+data/bronze/satcat/*
+!data/bronze/satcat/years
+
 # Python
 __pycache__/
 *.pyc
