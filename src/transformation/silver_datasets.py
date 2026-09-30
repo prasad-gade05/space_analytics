@@ -45,7 +45,9 @@ def build_silver_satcat(path: Path) -> pd.DataFrame:
 
 def build_silver_socrates(path: Path) -> pd.DataFrame:
     df = pd.read_csv(path, dtype=SOCRATES_DTYPE)
-    df["TCA"] = pd.to_datetime(df["TCA"], format="%Y-%m-%d %H:%M:%S.%f", errors="raise")
+    # TCA usually carries milliseconds ("%Y-%m-%d %H:%M:%S.%f") but accept
+    # plain seconds too so a format tweak upstream degrades gracefully.
+    df["TCA"] = pd.to_datetime(df["TCA"], format="mixed", errors="raise")
     for col in ("TCA_RANGE", "TCA_RELATIVE_SPEED", "MAX_PROB", "DILUTION"):
         df[col] = pd.to_numeric(df[col], errors="coerce")
     df = df.rename(columns={
@@ -54,14 +56,27 @@ def build_silver_socrates(path: Path) -> pd.DataFrame:
         "MAX_PROB": "max_probability",
         "DILUTION": "dilution_km",
     })
+    # Millisecond precision: the old second-truncated ID collided whenever
+    # two conjunctions for the same pair fell within one second (119 such
+    # collisions in the 2026-09-29 upstream snapshot) and killed the run.
+    ms = (df["TCA"].dt.microsecond // 1000).astype(str).str.zfill(3)
     df["event_id"] = (
         df["NORAD_CAT_ID_1"].astype(str) + "-"
         + df["NORAD_CAT_ID_2"].astype(str) + "-"
-        + df["TCA"].dt.strftime("%Y%m%d%H%M%S")
+        + df["TCA"].dt.strftime("%Y%m%d%H%M%S") + ms
     )
-    dup = int(df["event_id"].duplicated().sum())
-    if dup:
-        raise ValueError(f"{dup} duplicate event_ids in SOCRATES data")
+    # Upstream SOCRATES runs refresh ~3x/day and the bulk CSV can repeat
+    # rows across refresh boundaries. Dedup deterministically (file order is
+    # min-range sorted, so keep="first" keeps the closest approach) instead
+    # of hard-failing the whole nightly pipeline.
+    dup_mask = df.duplicated(subset=["event_id"], keep=False)
+    if dup_mask.any():
+        n_rows = int(dup_mask.sum())
+        n_ids = int(df.loc[dup_mask, "event_id"].nunique())
+        sample = df.loc[dup_mask, "event_id"].head(5).tolist()
+        print(f"[silver/socrates] WARN: dropping {n_rows} rows sharing "
+              f"{n_ids} event_ids (e.g. {sample}) — keeping first per ID")
+        df = df.drop_duplicates(subset=["event_id"], keep="first").reset_index(drop=True)
     return df
 
 

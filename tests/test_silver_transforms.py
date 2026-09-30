@@ -137,6 +137,36 @@ def test_socrates_event_ids_unique_and_typed(tmp_path):
     assert df["min_range_km"].iloc[0] == pytest.approx(0.016)
 
 
+def test_socrates_same_second_ms_stays_unique(tmp_path):
+    # Regression for the 2026-09-29 CI failure: second-truncated event_ids
+    # collided (119 dups). Millisecond precision must keep these distinct.
+    header = ("NORAD_CAT_ID_1,OBJECT_NAME_1,DSE_1,NORAD_CAT_ID_2,OBJECT_NAME_2,"
+              "DSE_2,TCA,TCA_RANGE,TCA_RELATIVE_SPEED,MAX_PROB,DILUTION\n")
+    rows = (
+        "25544,ISS (ZARYA),0,100000,SARAMAGO,0,2026-08-23 04:16:59.334,0.016,10.5,1.918E-01,0.001\n"
+        "25544,ISS (ZARYA),0,100000,SARAMAGO,0,2026-08-23 04:16:59.871,0.020,10.5,1.0E-05,0.002\n"
+    )
+    p = tmp_path / "soc_ms.csv"
+    p.write_text(header + rows, encoding="utf-8")
+    df = silver_datasets.build_silver_socrates(p)
+    assert len(df) == 2
+    assert df["event_id"].is_unique
+
+
+def test_socrates_exact_duplicates_deduped_not_failed(tmp_path):
+    # Overlapping upstream refresh windows can repeat identical rows;
+    # silver must keep the first and continue instead of raising.
+    header = ("NORAD_CAT_ID_1,OBJECT_NAME_1,DSE_1,NORAD_CAT_ID_2,OBJECT_NAME_2,"
+              "DSE_2,TCA,TCA_RANGE,TCA_RELATIVE_SPEED,MAX_PROB,DILUTION\n")
+    row = ("25544,ISS (ZARYA),0,100000,SARAMAGO,0,2026-08-23 04:16:59.334,"
+           "0.016,10.5,1.918E-01,0.001\n")
+    p = tmp_path / "soc_dup.csv"
+    p.write_text(header + row + row, encoding="utf-8")
+    df = silver_datasets.build_silver_socrates(p)
+    assert len(df) == 1
+    assert df["event_id"].is_unique
+
+
 def test_growth_series_delta(tmp_path):
     content = (
         "Date,Cataloged,Decayed,On Orbit\n"
