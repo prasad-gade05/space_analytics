@@ -5,14 +5,14 @@
     "rejected": 0,
     "reject_reasons": {},
     "stale": 134,
-    "six_digit_ids": 1036,
+    "six_digit_ids": 1037,
     "regime_counts": {
-      "LEO-Constellation": 13339,
+      "LEO-Constellation": 13344,
       "LEO-SSO": 2911,
-      "Legacy-Debris": 1755,
-      "VLEO": 994,
+      "Legacy-Debris": 1756,
+      "VLEO": 989,
       "GEO": 583,
-      "MEO": 249,
+      "MEO": 248,
       "Upper-LEO": 55,
       "HEO/Deep-Space": 14
     }
@@ -28,15 +28,15 @@
     }
   },
   "conjunctions": {
-    "rows": 187302,
-    "tca_min": "2026-09-29 00:00:08.862000",
-    "tca_max": "2026-10-05 23:59:58.132000",
-    "prob_ge_1e_4": 23117,
-    "prob_ge_1e_2": 15393
+    "rows": 188526,
+    "tca_min": "2026-09-29 14:00:05.716000",
+    "tca_max": "2026-10-06 13:59:59.886000",
+    "prob_ge_1e_4": 22953,
+    "prob_ge_1e_2": 14733
   },
   "catalog_growth": {
-    "rows": 25474,
-    "last_date": "2026-09-29",
+    "rows": 25475,
+    "last_date": "2026-09-30",
     "last_cataloged": 70813
   }
 }
