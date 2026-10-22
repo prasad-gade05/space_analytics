@@ -1,10 +1,10 @@
 {
   "gp_objects": {
-    "rows": 20044,
-    "valid": 20044,
+    "rows": 20043,
+    "valid": 20043,
     "rejected": 0,
     "reject_reasons": {},
-    "stale": 130,
+    "stale": 137,
     "six_digit_ids": 1225,
     "regime_counts": {
       "LEO-Constellation": 13493,
@@ -14,17 +14,17 @@
       "GEO": 583,
       "MEO": 245,
       "Upper-LEO": 55,
-      "HEO/Deep-Space": 15
+      "HEO/Deep-Space": 14
     }
   },
   "satcat": {
-    "rows": 71083,
-    "on_orbit": 35488,
+    "rows": 71064,
+    "on_orbit": 35498,
     "object_types": {
-      "DEB": 35932,
-      "PAY": 28073,
-      "R/B": 6913,
-      "UNK": 165
+      "DEB": 35914,
+      "PAY": 28072,
+      "R/B": 6911,
+      "UNK": 167
     }
   },
   "conjunctions": {
